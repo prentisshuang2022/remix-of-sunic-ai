@@ -104,11 +104,16 @@ export default function OvertimeLeave() {
                   <TableHead>可调休(h)</TableHead>
                   <TableHead>补贴(¥)</TableHead>
                   <TableHead>备注</TableHead>
+                  <TableHead>操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredOT.map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer hover:bg-[#F9FAFB] transition-colors"
+                    onClick={() => handleRowClick(r.id)}
+                  >
                     <TableCell className="pl-6 font-medium text-sm">{r.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{r.dept}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{r.position}</TableCell>
@@ -120,6 +125,14 @@ export default function OvertimeLeave() {
                     <TableCell className="text-sm">{r.canDayoff}</TableCell>
                     <TableCell className="text-sm">{r.subsidy > 0 ? `¥${r.subsidy}` : "—"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.remark}</TableCell>
+                    <TableCell>
+                      <button
+                        className="text-xs text-[#3B5BDB] hover:underline"
+                        onClick={(e) => { e.stopPropagation(); handleRowClick(r.id); }}
+                      >
+                        查看详情
+                      </button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
