@@ -62,9 +62,8 @@ export default function TodayOverview({ onSwitchTab }: { onSwitchTab: (tab: stri
     return true;
   });
 
-  const handleMarkDone = (id: string, name: string) => {
-    setDoneIds((prev) => new Set(prev).add(id));
-    toast.success(`${name} 的异常已标记为已处理`);
+  const handleNotify = (_id: string, name: string) => {
+    toast.success(`已通过钉钉发送通知给${name}`);
   };
 
   // KPI
@@ -188,8 +187,8 @@ export default function TodayOverview({ onSwitchTab }: { onSwitchTab: (tab: stri
                           <DropdownMenuItem onClick={() => navigate(`/attendance/exception/${row.id}`)}>
                             <ArrowUpRight className="mr-2 h-4 w-4" />查看详情
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleMarkDone(row.id, row.name)} disabled={row.status === "done"}>
-                            <CheckCircle2 className="mr-2 h-4 w-4" />标记已处理
+                          <DropdownMenuItem onClick={() => handleNotify(row.id, row.name)} disabled={row.status === "employee-done"}>
+                            <Send className="mr-2 h-4 w-4" />一键通知钉钉
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => toast(`已通过钉钉发起与 ${row.name} 的会话`)}>
