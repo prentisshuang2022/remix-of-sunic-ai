@@ -48,7 +48,7 @@ export default function Training() {
 
         {/* § 2 — Core scenarios */}
         <section id="sec-scenario">
-          <SectionHead color="purple" title="核心业务闭环" sub="脱岗培训解决"会不会"，在岗培训解决"熟不熟"" />
+          <SectionHead color="purple" title="核心业务闭环" sub={'脱岗培训解决"会不会"，在岗培训解决"熟不熟"'} />
           <div className="grid gap-4 xl:grid-cols-2">
             <ScenarioOfflineCard />
             <ScenarioOnTheJobCard />
