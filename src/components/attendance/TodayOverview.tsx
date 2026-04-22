@@ -105,7 +105,7 @@ export default function TodayOverview({ onSwitchTab }: { onSwitchTab: (tab: stri
             <div className="flex items-start justify-between">
               <div>
                 <CardTitle className="text-base">今日异常列表</CardTitle>
-                <CardDescription>需要处理的考勤异常记录</CardDescription>
+                <CardDescription>需要通知处理的考勤异常记录</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
