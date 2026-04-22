@@ -71,6 +71,16 @@ export default {
           foreground: "hsl(var(--ai-foreground))",
           soft: "hsl(var(--ai-soft))",
         },
+        "train-offline": {
+          DEFAULT: "hsl(var(--train-offline))",
+          foreground: "hsl(var(--train-offline-foreground))",
+          soft: "hsl(var(--train-offline-soft))",
+        },
+        "train-onsite": {
+          DEFAULT: "hsl(var(--train-onsite))",
+          foreground: "hsl(var(--train-onsite-foreground))",
+          soft: "hsl(var(--train-onsite-soft))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

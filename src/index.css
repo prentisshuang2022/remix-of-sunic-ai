@@ -60,6 +60,14 @@
     --ai-foreground: 0 0% 100%;
     --ai-soft: 265 90% 97%;
 
+    /* 培训双主色 */
+    --train-offline: 239 84% 67%;
+    --train-offline-foreground: 0 0% 100%;
+    --train-offline-soft: 239 90% 96%;
+    --train-onsite: 160 59% 46%;
+    --train-onsite-foreground: 0 0% 100%;
+    --train-onsite-soft: 160 70% 94%;
+
     /* 侧边栏 */
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 222 25% 25%;
@@ -106,6 +114,13 @@
     --ai: 265 80% 70%;
     --ai-foreground: 0 0% 100%;
     --ai-soft: 265 40% 22%;
+
+    --train-offline: 239 84% 72%;
+    --train-offline-foreground: 0 0% 100%;
+    --train-offline-soft: 239 40% 20%;
+    --train-onsite: 160 59% 50%;
+    --train-onsite-foreground: 0 0% 100%;
+    --train-onsite-soft: 160 40% 18%;
     --sidebar-background: 222 28% 10%;
     --sidebar-foreground: 210 40% 90%;
     --sidebar-primary: 231 80% 65%;
