@@ -307,6 +307,8 @@ export default function AttendanceHeatmap() {
           </div>
         )}
       </div>
+
+      <LeaveBalanceDrawer open={leaveDrawerOpen} onOpenChange={setLeaveDrawerOpen} />
     </div>
   );
 }
