@@ -35,8 +35,6 @@ const helpers = [
   { title: "招聘管理", url: "/recruiting", icon: Briefcase },
   { title: "绩效助手", url: "/performance", icon: LineChart },
   { title: "培训助手", url: "/training", icon: GraduationCap },
-  { title: "薪酬福利", url: "/payroll", icon: Wallet },
-  { title: "数据报表", url: "/reports", icon: BarChart3 },
 ];
 
 const conversation = [
