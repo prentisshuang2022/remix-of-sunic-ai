@@ -35,7 +35,7 @@ export default function Attendance() {
       {/* Tab 内容 */}
       <div className="p-6">
         {tab === "overview" && <TodayOverview onSwitchTab={setTab} />}
-        {tab === "detail" && <AttendanceHeatmap />}
+        {tab === "detail" && <AttendanceHeatmap onSwitchTab={setTab} />}
         {tab === "overtime" && <OvertimeLeave />}
         {tab === "rules" && <RuleEngine />}
       </div>
