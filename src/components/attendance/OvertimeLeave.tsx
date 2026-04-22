@@ -16,7 +16,7 @@ import { overtimeRows, dayoffRows } from "@/mocks/attendance";
 
 export default function OvertimeLeave() {
   const [subTab, setSubTab] = useState<"overtime" | "dayoff">("overtime");
-  const [campusFilter, setCampusFilter] = useState("all");
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [posFilter, setPosFilter] = useState("all");
 
   const filteredOT = overtimeRows.filter((r) => {
