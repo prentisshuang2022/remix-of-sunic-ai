@@ -170,6 +170,11 @@ export default function OvertimeLeave() {
     </div>
 
       <UploadAttendanceModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+      <OvertimeDetailDrawer
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        detail={selectedDetail ? overtimeDetails[selectedDetail] ?? null : null}
+      />
     </>
   );
 }
