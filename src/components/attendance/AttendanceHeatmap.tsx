@@ -255,7 +255,7 @@ export default function AttendanceHeatmap() {
               </Button>
             )}
             {statusFilter === "调休" && (
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary">
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary" onClick={() => setLeaveDrawerOpen(true)}>
                 管理调休余额 <ArrowRight className="h-3 w-3" />
               </Button>
             )}
@@ -294,6 +294,7 @@ export default function AttendanceHeatmap() {
                     employee={emp}
                     activeFilter={statusFilter}
                     onCollapse={() => toggleExpand(emp.id)}
+                    onOpenLeaveBalance={() => setLeaveDrawerOpen(true)}
                   />
                 </div>
               )}
