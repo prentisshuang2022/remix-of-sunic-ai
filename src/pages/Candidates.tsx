@@ -279,12 +279,79 @@ const statusStyle: Record<string, string> = {
   "已 pass": "bg-danger-soft text-[hsl(var(--danger))]",
 };
 
+// [MOCK] 当前岗位画像数据 —— 重新匹配时可编辑
+const defaultProfileDims = [
+  { key: "skill", label: "技能匹配", weight: 35, threshold: 60, desc: "核心技术栈匹配度" },
+  { key: "exp", label: "工作经验", weight: 25, threshold: 50, desc: "相关领域工作年限" },
+  { key: "edu", label: "教育背景", weight: 15, threshold: 40, desc: "学历与院校" },
+  { key: "stable", label: "稳定性", weight: 15, threshold: 50, desc: "跳槽频率与在职时长" },
+  { key: "salary", label: "薪资契合", weight: 10, threshold: 30, desc: "期望薪资与预算匹配" },
+];
+
+const defaultHardReqs = [
+  { id: "h1", text: "3 年以上前端开发经验" },
+  { id: "h2", text: "熟练掌握 React + TypeScript" },
+  { id: "h3", text: "本科及以上学历" },
+];
+
+const defaultExcludes = [
+  { id: "e1", text: "近 1 年内跳槽超过 2 次" },
+  { id: "e2", text: "无 TypeScript 项目经验" },
+];
+
 export default function Candidates() {
   const [tab, setTab] = useState<"all" | "强匹配" | "可考虑" | "弱匹配">("all");
   const [keyword, setKeyword] = useState("");
   const [sortBy, setSortBy] = useState("score");
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [rematchOpen, setRematchOpen] = useState(false);
+
+  // 重新匹配时可编辑的岗位需求
+  const [rematchDims, setRematchDims] = useState(defaultProfileDims.map(d => ({ ...d })));
+  const [rematchHardReqs, setRematchHardReqs] = useState(defaultHardReqs.map(r => ({ ...r })));
+  const [rematchExcludes, setRematchExcludes] = useState(defaultExcludes.map(r => ({ ...r })));
+
+  const totalWeight = rematchDims.reduce((s, d) => s + d.weight, 0);
+
+  const handleOpenRematch = () => {
+    setRematchOpen(true);
+  };
+
+  const handleRematch = () => {
+    if (totalWeight !== 100) {
+      toast({ title: "权重之和必须为 100%", description: `当前为 ${totalWeight}%，请调整后重试`, variant: "destructive" });
+      return;
+    }
+    setRematchOpen(false);
+    toast({ title: "重新匹配已启动", description: "正在根据修改后的岗位需求重新计算匹配度…" });
+    // [BACKEND] POST /api/candidates/rematch { dims, hardReqs, excludes }
+  };
+
+  const updateDimWeight = (key: string, val: number) => {
+    setRematchDims(prev => prev.map(d => d.key === key ? { ...d, weight: val } : d));
+  };
+  const updateDimThreshold = (key: string, val: number) => {
+    setRematchDims(prev => prev.map(d => d.key === key ? { ...d, threshold: val } : d));
+  };
+  const updateHardReq = (id: string, text: string) => {
+    setRematchHardReqs(prev => prev.map(r => r.id === id ? { ...r, text } : r));
+  };
+  const removeHardReq = (id: string) => {
+    setRematchHardReqs(prev => prev.filter(r => r.id !== id));
+  };
+  const addHardReq = () => {
+    setRematchHardReqs(prev => [...prev, { id: `h-${Date.now()}`, text: "" }]);
+  };
+  const updateExclude = (id: string, text: string) => {
+    setRematchExcludes(prev => prev.map(r => r.id === id ? { ...r, text } : r));
+  };
+  const removeExclude = (id: string) => {
+    setRematchExcludes(prev => prev.filter(r => r.id !== id));
+  };
+  const addExclude = () => {
+    setRematchExcludes(prev => [...prev, { id: `e-${Date.now()}`, text: "" }]);
+  };
 
   const filtered = useMemo(() => {
     let list = candidates.filter((c) => {
@@ -321,8 +388,8 @@ export default function Candidates() {
         backLabel="返回招聘需求池"
         actions={
           <>
-            <Button variant="outline" size="sm">
-              <Sparkles className="h-4 w-4" />重新匹配
+            <Button variant="outline" size="sm" onClick={handleOpenRematch}>
+              <Settings2 className="h-4 w-4" />重新匹配
             </Button>
             <Button size="sm" disabled={selected.size === 0}>
               <Users className="h-4 w-4" />批量加入面试 {selected.size > 0 && `(${selected.size})`}
