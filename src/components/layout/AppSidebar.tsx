@@ -5,8 +5,7 @@ import {
   Briefcase,
   LineChart,
   GraduationCap,
-  Wallet,
-  BarChart3,
+  BookOpen,
   MessageSquarePlus,
   History,
 } from "lucide-react";
@@ -35,6 +34,7 @@ const helpers = [
   { title: "招聘管理", url: "/recruiting", icon: Briefcase },
   { title: "绩效助手", url: "/performance", icon: LineChart },
   { title: "培训助手", url: "/training", icon: GraduationCap },
+  { title: "知识库管理", url: "/knowledge", icon: BookOpen },
 ];
 
 const conversation = [
