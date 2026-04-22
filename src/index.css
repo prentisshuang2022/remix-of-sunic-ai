@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 人事 AI 员工 — 设计系统
+   所有颜色 HSL；语义令牌驱动 */
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* 主品牌：靛蓝（沉稳、企业向） */
+    --primary: 231 75% 58%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 231 80% 96%;
+
+    --secondary: 220 16% 94%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 220 16% 95%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 16% 94%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 78% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 14% 90%;
+    --input: 220 14% 90%;
+    --ring: 231 75% 58%;
+
+    --radius: 0.625rem;
+
+    /* 状态色 */
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 152 70% 94%;
+
+    --warning: 36 95% 52%;
+    --warning-foreground: 30 50% 15%;
+    --warning-soft: 42 100% 94%;
+
+    --info: 210 90% 56%;
+    --info-foreground: 0 0% 100%;
+    --info-soft: 210 100% 96%;
+
+    --danger: 0 78% 58%;
+    --danger-soft: 0 90% 96%;
+
+    /* AI 强调色（紫） */
+    --ai: 265 75% 62%;
+    --ai-foreground: 0 0% 100%;
+    --ai-soft: 265 90% 97%;
+
+    /* 侧边栏 */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 25% 25%;
+    --sidebar-primary: 231 75% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 231 80% 96%;
+    --sidebar-accent-foreground: 231 75% 40%;
+    --sidebar-border: 220 14% 92%;
+    --sidebar-ring: 231 75% 58%;
+  }
+
+  .dark {
+    --background: 222 30% 8%;
+    --foreground: 210 40% 98%;
+    --card: 222 28% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 28% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 231 80% 65%;
+    --primary-foreground: 222 47% 11%;
+    --primary-soft: 231 40% 20%;
+    --secondary: 222 20% 18%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 222 20% 16%;
+    --muted-foreground: 220 10% 65%;
+    --accent: 222 20% 18%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 20% 20%;
+    --input: 222 20% 20%;
+    --ring: 231 80% 65%;
+    --success: 152 55% 48%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 152 40% 18%;
+    --warning: 36 90% 58%;
+    --warning-foreground: 30 50% 10%;
+    --warning-soft: 36 40% 20%;
+    --info: 210 85% 62%;
+    --info-foreground: 0 0% 100%;
+    --info-soft: 210 40% 20%;
+    --danger: 0 70% 58%;
+    --danger-soft: 0 40% 20%;
+    --ai: 265 80% 70%;
+    --ai-foreground: 0 0% 100%;
+    --ai-soft: 265 40% 22%;
+    --sidebar-background: 222 28% 10%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 231 80% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 231 40% 20%;
+    --sidebar-accent-foreground: 231 80% 80%;
+    --sidebar-border: 222 20% 18%;
+    --sidebar-ring: 231 80% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "tnum", "cv11";
+  }
+  h1, h2, h3, h4 {
+    @apply tracking-tight;
+  }
+}
+
+@layer components {
+  /* 统计指标小卡 */
+  .stat-card {
+    @apply rounded-lg border bg-card p-4 flex items-start gap-3 transition-colors hover:bg-accent/40;
+  }
+  /* AI 提示信息卡 */
+  .ai-card {
+    @apply rounded-lg border p-4;
+    background-color: hsl(var(--ai-soft));
+    border-color: hsl(var(--ai) / 0.25);
+  }
+  /* 风险/警告条 */
+  .warn-banner {
+    @apply rounded-lg border p-3 text-sm flex items-start gap-2;
+    background-color: hsl(var(--warning-soft));
+    border-color: hsl(var(--warning) / 0.4);
+    color: hsl(var(--warning-foreground));
+  }
+}

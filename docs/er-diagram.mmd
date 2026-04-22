@@ -1,0 +1,206 @@
+erDiagram
+    Employee ||--o{ EmployeeDiff : has
+    Employee ||--o{ EmployeeMaterial : has
+    Employee ||--o{ ChangeRecord : has
+    Employee ||--o{ AttendanceException : has
+    Employee ||--o{ OvertimeRecord : has
+    Employee ||--o{ PerformanceForm : evaluated_in
+    Employee ||--o{ InterviewRecord : has
+    Employee ||--o{ GradingItem : takes
+    Employee ||--o| Mentor : may_be
+
+    Job ||--o| JobProfile : has
+    Job ||--o{ Candidate : matched
+    Resume ||--o{ Candidate : matched
+
+    PerformanceCycle ||--o{ PerformanceForm : contains
+    PerformanceCycle ||--o{ InterviewRecord : contains
+
+    Exam ||--o{ GradingItem : contains
+    Question ||--o{ GradingItem : graded_in
+
+    Mentor ||--o{ OnsitePlan : mentors
+    Employee ||--o{ OnsitePlan : learns
+
+    ChatSession ||--o{ ChatMessage : contains
+
+    Employee {
+        string id PK
+        string name
+        enum status
+        string entity
+        string department
+        string position
+        date hireDate
+        date contractEnd
+        enum contractStatus
+        date idEnd
+        enum syncStatus
+        number completeness
+    }
+
+    EmployeeDiff {
+        string id PK
+        string employeeId FK
+        string field
+        string dingtalkValue
+        string systemValue
+    }
+
+    EmployeeMaterial {
+        string id PK
+        string employeeId FK
+        enum type
+        string fileUrl
+        json ocrResult
+    }
+
+    ChangeRecord {
+        string id PK
+        string employeeId FK
+        string type
+        date date
+    }
+
+    AttendanceException {
+        string id PK
+        string employeeId FK
+        date date
+        enum type
+        enum status
+        string aiSuggestion
+    }
+
+    OvertimeRecord {
+        string id PK
+        string employeeId FK
+        date date
+        number workHours
+        enum subsidyType
+        enum status
+    }
+
+    Job {
+        string id PK
+        string title
+        string dept
+        enum status
+        enum urgency
+        string owner
+    }
+
+    JobProfile {
+        string id PK
+        string jobId FK
+        json dimensions
+    }
+
+    Resume {
+        string id PK
+        string name
+        enum parseStatus
+        json parsedData
+    }
+
+    Candidate {
+        string id PK
+        string jobId FK
+        string resumeId FK
+        number matchScore
+        json dimScores
+    }
+
+    PerformanceCycle {
+        string id PK
+        string name
+        enum status
+        json stages
+    }
+
+    PerformanceForm {
+        string id PK
+        string cycleId FK
+        string employeeId FK
+        json kpis
+        number selfTotal
+        number leaderTotal
+        enum status
+    }
+
+    Indicator {
+        string code PK
+        string name
+        string family
+        string target
+        string source
+    }
+
+    InterviewRecord {
+        string id PK
+        string employeeId FK
+        string cycleId FK
+        number score
+        string level
+        enum status
+    }
+
+    Exam {
+        string id PK
+        string title
+        string category
+        number avgScore
+    }
+
+    Question {
+        string id PK
+        string category
+        enum type
+        enum difficulty
+        text stem
+    }
+
+    GradingItem {
+        string id PK
+        string examId FK
+        string employeeId FK
+        number aiScore
+        number hrScore
+    }
+
+    Material {
+        string id PK
+        string title
+        string category
+        string fileUrl
+    }
+
+    Mentor {
+        string id PK
+        string employeeId FK
+        enum level
+        number capacity
+        number active
+        number rating
+    }
+
+    OnsitePlan {
+        string id PK
+        string employeeId FK
+        string mentorId FK
+        json checkpoints
+    }
+
+    ChatSession {
+        string id PK
+        string scene
+        string title
+        boolean pinned
+    }
+
+    ChatMessage {
+        string id PK
+        string sessionId FK
+        enum role
+        text text
+        json card
+    }

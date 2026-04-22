@@ -1,0 +1,4453 @@
+openapi: "3.0.3"
+info:
+  title: Sunic AI Employee - HR 智能管理平台 API
+  version: "1.0.0"
+  description: |
+    三工光电人事 AI 员工系统后端 API 契约。
+    
+    ## 通用约定
+    - 所有接口返回统一包装结构 `ApiResponse<T>`
+    - 分页接口统一使用 `PaginatedResponse<T>`
+    - 认证方式：Bearer Token (JWT)
+    - 时间格式：ISO 8601 (`2026-04-22T09:00:00+08:00`)
+    - 敏感字段展示脱敏，存储加密
+    
+    ## 角色体系
+    | 角色 | 代码 | 说明 |
+    |------|------|------|
+    | 候选人 | candidate | 只能查看自己的投递信息 |
+    | 普通员工 | employee | 自己的数据 + AI 助手 |
+    | 部门主管 | manager | 自己 + 直属下属 |
+    | HR | hr | 全公司员工 + 招聘 + 配置 |
+    | 面试官 | interviewer | 自己参与的面试 |
+    | 管理员 | admin | 全部权限 |
+    
+    ## 错误码前缀
+    | 模块 | 前缀 | 范围 |
+    |------|------|------|
+    | 认证 | AUTH_ | 001-099 |
+    | 员工 | EMP_ | 001-099 |
+    | 部门 | DEPT_ | 001-099 |
+    | 考勤 | ATT_ | 001-099 |
+    | 绩效 | PERF_ | 001-099 |
+    | 招聘 | RECRUIT_ | 001-099 |
+    | 面试 | INTERVIEW_ | 001-099 |
+    | 培训 | TRAIN_ | 001-099 |
+    | AI | AI_ | 001-099 |
+
+servers:
+  - url: https://api.sunic-hr.com/v1
+    description: Production
+  - url: https://api-staging.sunic-hr.com/v1
+    description: Staging
+
+tags:
+  - name: Auth
+    description: 认证与授权
+  - name: Employees
+    description: 员工档案管理
+  - name: Departments
+    description: 部门与组织架构
+  - name: Attendance
+    description: 考勤管理（异常、加班）
+  - name: Performance
+    description: 绩效管理（OKR/KPI/面谈）
+  - name: Recruitment
+    description: 招聘管理（岗位、简历、画像）
+  - name: Interview
+    description: 面试管理
+  - name: Training
+    description: 培训管理（考试、题库、导师、材料）
+  - name: AI
+    description: AI 对话与智能能力
+
+paths:
+  # ==================== Auth ====================
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 用户登录
+      operationId: authLogin
+      description: |
+        使用工号/手机号 + 密码登录，返回 JWT token 对。
+        错误码：AUTH_001 用户不存在，AUTH_002 密码错误，AUTH_003 账号已禁用。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account, password]
+              properties:
+                account:
+                  type: string
+                  description: 工号或手机号
+                  example: "E001"
+                password:
+                  type: string
+                  format: password
+                  example: "********"
+            example:
+              account: "E001"
+              password: "Abc123456"
+      responses:
+        "200":
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_LoginData"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: 退出登录
+      operationId: authLogout
+      security:
+        - bearerAuth: []
+      description: 注销当前 token，加入黑名单。
+      responses:
+        "200":
+          description: 退出成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Null"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: 刷新 Token
+      operationId: authRefresh
+      description: |
+        使用 refresh_token 换取新的 access_token。
+        错误码：AUTH_004 refresh_token 已过期。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_LoginData"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: 当前用户信息与权限
+      operationId: authMe
+      security:
+        - bearerAuth: []
+      description: 返回当前登录用户信息、角色列表、权限列表。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_CurrentUser"
+
+  # ==================== Employees ====================
+  /employees:
+    get:
+      tags: [Employees]
+      summary: 员工列表（分页）
+      operationId: listEmployees
+      security:
+        - bearerAuth: []
+      description: |
+        分页查询员工，支持多条件筛选。
+        - employee 角色：只返回自己
+        - manager：自己 + 直属下属
+        - hr/admin：全部
+        错误码：EMP_001 无权限访问。
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: keyword
+          in: query
+          schema:
+            type: string
+          description: 搜索关键词（姓名/工号/手机号）
+        - name: department
+          in: query
+          schema:
+            type: string
+          description: 部门筛选
+        - name: entity
+          in: query
+          schema:
+            type: string
+          description: 合同归属实体
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/EmployeeStatus"
+          description: 员工状态
+        - name: contract_status
+          in: query
+          schema:
+            type: string
+            enum: [normal, expiring_soon, expired]
+          description: 合同状态
+        - name: sync_status
+          in: query
+          schema:
+            type: string
+            enum: [synced, pending, diff, failed]
+          description: 钉钉同步状态
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_EmployeeListItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /employees/{id}:
+    get:
+      tags: [Employees]
+      summary: 员工详情
+      operationId: getEmployee
+      security:
+        - bearerAuth: []
+      description: |
+        获取员工完整档案，包括基础信息、合同、教育、附件列表、数据源元信息。
+        敏感字段（身份证、手机号）按角色脱敏：employee 看脱敏，hr/admin 看完整。
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_EmployeeDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /employees/sync:
+    post:
+      tags: [Employees]
+      summary: 钉钉全量同步
+      operationId: syncEmployees
+      security:
+        - bearerAuth: []
+      description: |
+        触发钉钉员工数据全量同步。仅 hr/admin 可用。
+        异步任务，返回任务 ID，可轮询状态。
+        错误码：EMP_010 钉钉 API 连接失败，EMP_011 同步正在进行中。
+      responses:
+        "200":
+          description: 同步任务已启动
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_SyncResult"
+
+  /employees/{id}/resolve-diff:
+    put:
+      tags: [Employees]
+      summary: 处理钉钉差异
+      operationId: resolveDiff
+      security:
+        - bearerAuth: []
+      description: |
+        处理钉钉与本系统的字段差异。仅 hr/admin。
+        错误码：EMP_020 无差异可处理。
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, fields]
+              properties:
+                action:
+                  type: string
+                  enum: [accept_dingtalk, keep_system]
+                  description: 处理动作
+                fields:
+                  type: array
+                  items:
+                    type: string
+                  description: 要处理的字段列表
+            example:
+              action: "accept_dingtalk"
+              fields: ["phone", "department"]
+      responses:
+        "200":
+          description: 处理成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_EmployeeDetail"
+
+  /employees/batch:
+    post:
+      tags: [Employees]
+      summary: 批量操作
+      operationId: batchEmployees
+      security:
+        - bearerAuth: []
+      description: 批量同步/接受变更/提醒补资料。仅 hr/admin。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, action]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+                action:
+                  type: string
+                  enum: [sync, accept, remind]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_BatchResult"
+
+  /employees/{id}/materials:
+    post:
+      tags: [Employees]
+      summary: 上传员工材料
+      operationId: uploadMaterial
+      security:
+        - bearerAuth: []
+      description: |
+        上传合同/身份证/学历/资质证书等材料。
+        支持 OCR 自动识别（身份证、学历证书）。
+        文件大小限制：20MB，格式：PDF/JPG/PNG。
+        签名 URL 有效期 1 小时。
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, type]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                type:
+                  type: string
+                  enum: [contract, id_card, diploma, cert]
+      responses:
+        "200":
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_MaterialUploadResult"
+
+  /employees/{id}/changes:
+    get:
+      tags: [Employees]
+      summary: 异动记录
+      operationId: listChanges
+      security:
+        - bearerAuth: []
+      description: 查询员工历史异动（入职/转正/调岗/续签/部门变更等）。
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_ChangeRecord"
+
+  /employees/export:
+    post:
+      tags: [Employees]
+      summary: 导出员工数据
+      operationId: exportEmployees
+      security:
+        - bearerAuth: []
+      description: |
+        按筛选条件导出员工列表为 Excel。异步生成，返回下载 URL。
+        签名 URL 有效期 1 小时。仅 hr/admin。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                keyword:
+                  type: string
+                department:
+                  type: string
+                entity:
+                  type: string
+                status:
+                  $ref: "#/components/schemas/EmployeeStatus"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_ExportResult"
+
+  # ==================== Departments ====================
+  /departments/tree:
+    get:
+      tags: [Departments]
+      summary: 部门树形结构
+      operationId: getDepartmentTree
+      security:
+        - bearerAuth: []
+      description: |
+        返回完整部门树，最多 6 级。包含每个节点的员工数量。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_DepartmentTreeArray"
+
+  /departments:
+    post:
+      tags: [Departments]
+      summary: 创建部门
+      operationId: createDepartment
+      security:
+        - bearerAuth: []
+      description: 创建部门节点。仅 hr/admin。错误码：DEPT_001 父部门不存在，DEPT_002 层级超过 6 级。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDepartmentRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Department"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /departments/{id}:
+    put:
+      tags: [Departments]
+      summary: 更新部门
+      operationId: updateDepartment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDepartmentRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Department"
+    delete:
+      tags: [Departments]
+      summary: 删除部门
+      operationId: deleteDepartment
+      security:
+        - bearerAuth: []
+      description: 删除部门。错误码：DEPT_003 部门下有员工不可删除。
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Null"
+
+  # ==================== Attendance ====================
+  /attendance/exceptions:
+    get:
+      tags: [Attendance]
+      summary: 考勤异常列表
+      operationId: listAttendanceExceptions
+      security:
+        - bearerAuth: []
+      description: |
+        查询考勤异常记录。
+        - employee：只看自己
+        - manager：自己 + 下属
+        - hr/admin：全部
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [late, early_leave, absent, missing_clock, overtime]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, waiting_employee, approving, done]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_AttendanceException"
+
+  /attendance/exceptions/{id}:
+    get:
+      tags: [Attendance]
+      summary: 考勤异常详情
+      operationId: getAttendanceException
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: 获取异常详情，含 AI 处理建议和打卡时间线。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_AttendanceExceptionDetail"
+    put:
+      tags: [Attendance]
+      summary: 处理考勤异常
+      operationId: resolveAttendanceException
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: |
+        处理异常：补卡/核销/联系员工/升级主管。
+        状态流：pending → waiting_employee → approving → done。
+        错误码：ATT_001 异常已处理。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [make_up, write_off, contact, escalate]
+                  description: "补卡 / 核销 / 联系员工 / 升级主管"
+                note:
+                  type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_AttendanceException"
+
+  /attendance/exceptions/batch:
+    post:
+      tags: [Attendance]
+      summary: 批量处理异常
+      operationId: batchResolveExceptions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, action]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+                action:
+                  type: string
+                  enum: [make_up, write_off, contact, escalate]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_BatchResult"
+
+  /attendance/overtime:
+    get:
+      tags: [Attendance]
+      summary: 加班记录列表
+      operationId: listOvertime
+      security:
+        - bearerAuth: []
+      description: |
+        查询加班记录。区分职能部门（餐补/调休）和生产一线（金额补贴）。
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dept_type
+          in: query
+          schema:
+            type: string
+            enum: [functional, production]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_OvertimeRecord"
+
+  /attendance/overtime/{id}:
+    put:
+      tags: [Attendance]
+      summary: 核销加班
+      operationId: resolveOvertime
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [approve, reject]
+                note:
+                  type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_OvertimeRecord"
+
+  /attendance/overtime/batch:
+    post:
+      tags: [Attendance]
+      summary: 批量核销加班
+      operationId: batchResolveOvertime
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, action]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+                action:
+                  type: string
+                  enum: [approve, reject]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_BatchResult"
+
+  # ==================== Performance ====================
+  /performance/overview:
+    get:
+      tags: [Performance]
+      summary: 绩效概览统计
+      operationId: getPerformanceOverview
+      security:
+        - bearerAuth: []
+      description: 返回在考周期数、待处理、超期、AI 异常预警等汇总数据。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_PerformanceOverview"
+
+  /performance/cycles:
+    get:
+      tags: [Performance]
+      summary: 考核周期列表
+      operationId: listPerformanceCycles
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_CycleArray"
+    post:
+      tags: [Performance]
+      summary: 创建考核周期
+      operationId: createPerformanceCycle
+      security:
+        - bearerAuth: []
+      description: |
+        创建新的考核周期，含 5 阶段配置。仅 hr/admin。
+        错误码：PERF_001 时间范围与已有周期重叠。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCycleRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Cycle"
+
+  /performance/cycles/{id}:
+    get:
+      tags: [Performance]
+      summary: 周期详情
+      operationId: getPerformanceCycle
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: 返回周期详情，含 5 阶段进度和员工考核列表。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_CycleDetail"
+
+  /performance/cycles/{id}/remind:
+    post:
+      tags: [Performance]
+      summary: 一键催办
+      operationId: remindCycle
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: 向超期未提交员工推送催办通知（钉钉）。仅 hr/admin。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_RemindResult"
+
+  /performance/forms/{id}:
+    get:
+      tags: [Performance]
+      summary: 绩效表单详情
+      operationId: getPerformanceForm
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: |
+        获取绩效表单，含 KPI 评分列表 + AI 建议分数。
+        employee 只能看自己的；manager 可看下属的。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_PerformanceForm"
+    put:
+      tags: [Performance]
+      summary: 提交/更新绩效评分
+      operationId: submitPerformanceForm
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: |
+        提交或保存草稿。KPI 权重总和必须 = 100%。
+        错误码：PERF_010 权重不等于100%，PERF_011 非当前阶段不可提交。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitFormRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_PerformanceForm"
+
+  /performance/forms/{id}/validate:
+    post:
+      tags: [Performance]
+      summary: AI 异常校验
+      operationId: validatePerformanceForm
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: |
+        AI 检测评分异常：
+        - 上级评分与 AI 建议偏差 ≥ 10 分
+        - 自评与上级偏差 ≥ 18 分
+        - 评分与 ERP/MES 数据不一致
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_ValidationResult"
+
+  /performance/strategy:
+    get:
+      tags: [Performance]
+      summary: 战略目标
+      operationId: getStrategy
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Strategy"
+    put:
+      tags: [Performance]
+      summary: 更新战略目标
+      operationId: updateStrategy
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStrategyRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Strategy"
+
+  /performance/strategy/ai-breakdown:
+    post:
+      tags: [Performance]
+      summary: AI 战略目标拆解
+      operationId: aiStrategyBreakdown
+      security:
+        - bearerAuth: []
+      description: AI 将公司级 KPI 拆解为部门级 KPI，含目标值和权重。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_kpis]
+              properties:
+                company_kpis:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/StrategyKpi"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_DeptStrategyArray"
+
+  /performance/indicators:
+    get:
+      tags: [Performance]
+      summary: 指标库列表
+      operationId: listIndicators
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: family
+          in: query
+          schema:
+            type: string
+          description: 按部门筛选
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_Indicator"
+    post:
+      tags: [Performance]
+      summary: 创建指标
+      operationId: createIndicator
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIndicatorRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Indicator"
+
+  /performance/interviews:
+    get:
+      tags: [Performance]
+      summary: 面谈队列
+      operationId: listPerformanceInterviews
+      security:
+        - bearerAuth: []
+      description: 待面谈和已完成面谈列表。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_InterviewItemArray"
+
+  /performance/interviews/{id}:
+    get:
+      tags: [Performance]
+      summary: 面谈报告
+      operationId: getPerformanceInterview
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: 含 AI 生成的 5 步面谈话术、下季度目标建议、绩效结果应用。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_InterviewReport"
+
+  /performance/interviews/{id}/regenerate:
+    post:
+      tags: [Performance]
+      summary: AI 重新生成面谈话术
+      operationId: regenerateInterview
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_InterviewReport"
+
+  /performance/interviews/{id}/notes:
+    post:
+      tags: [Performance]
+      summary: 保存面谈记录
+      operationId: saveInterviewNotes
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                archive:
+                  type: boolean
+                  description: 是否归档至员工档案
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Null"
+
+  /performance/data-sources:
+    get:
+      tags: [Performance]
+      summary: 过程数据源状态
+      operationId: listDataSources
+      security:
+        - bearerAuth: []
+      description: MES/ERP/PLM/CRM/QMS 联通状态查询。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_DataSourceArray"
+
+  # ==================== Recruitment ====================
+  /jobs:
+    get:
+      tags: [Recruitment]
+      summary: 岗位需求列表
+      operationId: listJobs
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [recruiting, profile_pending, paused, completed]
+        - name: dept
+          in: query
+          schema:
+            type: string
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: urgency
+          in: query
+          schema:
+            type: string
+            enum: [high, medium, low]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_Job"
+    post:
+      tags: [Recruitment]
+      summary: 创建岗位需求
+      operationId: createJob
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Job"
+
+  /jobs/{id}:
+    get:
+      tags: [Recruitment]
+      summary: 岗位详情（含画像）
+      operationId: getJob
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_JobDetail"
+    put:
+      tags: [Recruitment]
+      summary: 更新岗位
+      operationId: updateJob
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateJobRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Job"
+
+  /jobs/{id}/generate-profile:
+    post:
+      tags: [Recruitment]
+      summary: AI 生成岗位画像
+      operationId: generateJobProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: |
+        从 JD 文本提取：硬性要求、加分项、排除项、评分维度权重。
+        预估 token 消耗：~2000 tokens。超时：30s。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jd:
+                  type: string
+                  description: 岗位描述文本（可选，默认使用岗位已有 JD）
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_JobProfile"
+
+  /jobs/{id}/profile:
+    put:
+      tags: [Recruitment]
+      summary: 更新岗位画像
+      operationId: updateJobProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobProfile"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_JobProfile"
+
+  /jobs/{id}/match:
+    post:
+      tags: [Recruitment]
+      summary: AI 候选人匹配
+      operationId: matchCandidates
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: |
+        基于岗位画像对简历库进行智能匹配排序。
+        预估 token 消耗：~3000 tokens/候选人。超时：60s。
+        匹配度 ≥ 85% 标记为"高度匹配"。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                top_n:
+                  type: integer
+                  default: 20
+                  description: 返回 Top N 候选人
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_CandidateArray"
+
+  /jobs/{id}/candidates/{candidateId}:
+    get:
+      tags: [Recruitment]
+      summary: 候选人详情
+      operationId: getCandidate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - name: candidateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_CandidateDetail"
+
+  /resumes:
+    get:
+      tags: [Recruitment]
+      summary: 简历库列表
+      operationId: listResumes
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: parse_status
+          in: query
+          schema:
+            type: string
+            enum: [parsed, parsing, failed]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_Resume"
+
+  /resumes/upload:
+    post:
+      tags: [Recruitment]
+      summary: 批量上传简历
+      operationId: uploadResumes
+      security:
+        - bearerAuth: []
+      description: |
+        批量上传简历文件（PDF/Word），自动触发 AI 解析。
+        单文件限制：10MB。签名 URL 有效期 1 小时。
+        候选人个人信息保留 2 年后自动清理。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_UploadResumeResult"
+
+  /resumes/{id}/parse:
+    post:
+      tags: [Recruitment]
+      summary: 重新解析简历
+      operationId: parseResume
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: 重新触发 AI 解析简历为结构化数据。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Resume"
+
+  # ==================== Interview ====================
+  /interviews:
+    post:
+      tags: [Interview]
+      summary: 创建面试安排
+      operationId: createInterview
+      security:
+        - bearerAuth: []
+      description: |
+        为候选人安排面试。
+        可见性：interviewer 只能看自己参与的面试。
+        错误码：INTERVIEW_001 面试官时间冲突。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInterviewRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Interview"
+
+  /interviews/{id}/feedback:
+    post:
+      tags: [Interview]
+      summary: 提交面试反馈
+      operationId: submitInterviewFeedback
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: 面试官提交评价和评分。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InterviewFeedbackRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_InterviewFeedback"
+
+  # ==================== Training ====================
+  /training/overview:
+    get:
+      tags: [Training]
+      summary: 培训概览统计
+      operationId: getTrainingOverview
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_TrainingOverview"
+
+  /training/tasks:
+    get:
+      tags: [Training]
+      summary: 培训待办任务
+      operationId: listTrainingTasks
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_TrainingTaskArray"
+
+  /training/exams:
+    get:
+      tags: [Training]
+      summary: 考试列表
+      operationId: listExams
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [week, month, quarter]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_Exam"
+
+  /training/exams/generate:
+    post:
+      tags: [Training]
+      summary: AI 自动出卷
+      operationId: generateExam
+      security:
+        - bearerAuth: []
+      description: |
+        AI 根据参数自动从题库组卷。
+        预估 token 消耗：~1500 tokens。超时：30s。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateExamRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Exam"
+
+  /training/exams/compose:
+    post:
+      tags: [Training]
+      summary: 手动组卷
+      operationId: composeExam
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComposeExamRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Exam"
+
+  /training/grading-queue:
+    get:
+      tags: [Training]
+      summary: 批改队列
+      operationId: listGradingQueue
+      security:
+        - bearerAuth: []
+      description: AI 初评主观题，返回待 HR 复核列表。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_GradingItemArray"
+
+  /training/grading/{id}:
+    put:
+      tags: [Training]
+      summary: HR 复核评分
+      operationId: reviewGrading
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [score]
+              properties:
+                score:
+                  type: number
+                comment:
+                  type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_GradingItem"
+
+  /training/scores:
+    get:
+      tags: [Training]
+      summary: 成绩列表
+      operationId: listScores
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: exam_id
+          in: query
+          schema:
+            type: string
+        - name: dept
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_Score"
+
+  /training/question-bank/tree:
+    get:
+      tags: [Training]
+      summary: 题库分类树
+      operationId: getQuestionBankTree
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_CategoryTreeArray"
+
+  /training/questions:
+    get:
+      tags: [Training]
+      summary: 题目列表
+      operationId: listQuestions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: sub_category
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [single, multi, judge, essay]
+        - name: difficulty
+          in: query
+          schema:
+            type: string
+            enum: [easy, mid, hard]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_Question"
+
+  /training/questions/generate:
+    post:
+      tags: [Training]
+      summary: AI 生成题目
+      operationId: generateQuestions
+      security:
+        - bearerAuth: []
+      description: |
+        输入知识点，AI 自动生成 3-5 道不同题型的题目（含答案和解析）。
+        预估 token 消耗：~1000 tokens/题。超时：30s。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [knowledge_point]
+              properties:
+                knowledge_point:
+                  type: string
+                count:
+                  type: integer
+                  default: 5
+                types:
+                  type: array
+                  items:
+                    type: string
+                    enum: [single, multi, judge, essay]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_QuestionArray"
+
+  /training/materials:
+    get:
+      tags: [Training]
+      summary: 培训材料列表
+      operationId: listMaterials
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_Material"
+
+  /training/materials/upload:
+    post:
+      tags: [Training]
+      summary: 上传培训材料
+      operationId: uploadMaterial_training
+      security:
+        - bearerAuth: []
+      description: 上传 PDF/Word/PPT 培训材料。单文件限制 50MB。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, category]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                category:
+                  type: string
+                title:
+                  type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Material"
+
+  /training/mentors:
+    get:
+      tags: [Training]
+      summary: 导师列表
+      operationId: listMentors
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: craft
+          in: query
+          schema:
+            type: string
+        - name: site
+          in: query
+          schema:
+            type: string
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [gold, senior, certified]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_MentorArray"
+    post:
+      tags: [Training]
+      summary: 新增导师
+      operationId: createMentor
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMentorRequest"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Mentor"
+
+  /training/mentors/{id}:
+    get:
+      tags: [Training]
+      summary: 导师详情
+      operationId: getMentor
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_MentorDetail"
+
+  /training/onsite/plans:
+    get:
+      tags: [Training]
+      summary: 在岗培训计划列表
+      operationId: listOnsitePlans
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_OnsitePlanArray"
+
+  /training/onsite/plans/{id}/checkpoint:
+    post:
+      tags: [Training]
+      summary: 提交培训节点记录
+      operationId: submitCheckpoint
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [week, content]
+              properties:
+                week:
+                  type: integer
+                  description: 周次（1/2/4/6/8）
+                content:
+                  type: string
+                attachments:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Checkpoint"
+
+  # ==================== AI ====================
+  /ai/chat/send:
+    post:
+      tags: [AI]
+      summary: 发送 AI 对话消息（流式）
+      operationId: sendAiMessage
+      security:
+        - bearerAuth: []
+      description: |
+        发送消息到 AI 助手，返回 SSE 流式响应。
+        
+        **SSE 格式**：
+        ```
+        event: thinking
+        data: {"content": "正在分析..."}
+        
+        event: message
+        data: {"content": "根据您的查询..."}
+        
+        event: sources
+        data: {"items": [{"title": "...", "url": "..."}]}
+        
+        event: card
+        data: {"type": "candidate", "data": {...}}
+        
+        event: followups
+        data: {"items": ["追问1", "追问2"]}
+        
+        event: done
+        data: {"token_usage": {"prompt": 500, "completion": 300}}
+        ```
+        
+        **隐私保护**：AI 助手基于当前登录用户身份过滤数据，不泄露他人隐私。
+        **Prompt Injection 防护**：用户输入不能影响系统 prompt。
+        **对话保留策略**：保留 90 天后归档。
+        
+        预估 token 消耗：500-3000 tokens。超时：120s。
+        
+        Content-Type: text/event-stream
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                session_id:
+                  type: string
+                  nullable: true
+                  description: 会话 ID，null 表示新建会话
+                scene:
+                  type: string
+                  enum: [hr_assistant, resume_screener, interview_helper, performance_coach, knowledge_qa, data_insight]
+                  description: 对话场景
+                message:
+                  type: string
+                  description: 用户消息
+            example:
+              session_id: null
+              scene: "hr_assistant"
+              message: "我还剩几天年假？"
+      responses:
+        "200":
+          description: SSE 流式响应
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE 事件流，见 description 中的格式说明
+
+  /ai/chat/sessions:
+    get:
+      tags: [AI]
+      summary: 会话列表
+      operationId: listAiSessions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/pageSize"
+        - name: scene
+          in: query
+          schema:
+            type: string
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_ChatSession"
+
+  /ai/chat/sessions/{id}:
+    get:
+      tags: [AI]
+      summary: 会话详情（含消息）
+      operationId: getAiSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_ChatSessionDetail"
+    put:
+      tags: [AI]
+      summary: 会话操作（置顶/重命名/删除）
+      operationId: updateAiSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [pin, unpin, rename, delete]
+                title:
+                  type: string
+                  description: action=rename 时必填
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_ChatSession"
+
+  /ai/resume/screen:
+    post:
+      tags: [AI]
+      summary: AI 简历筛选
+      operationId: aiResumeScreen
+      security:
+        - bearerAuth: []
+      description: |
+        AI 对指定简历进行筛选评估，输出评分 + 亮点 + 风险提示。
+        结果仅供参考，最终决定必须由人类做出。
+        预估 token 消耗：~2000 tokens/简历。超时：30s。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resume_id, job_id]
+              properties:
+                resume_id:
+                  type: string
+                job_id:
+                  type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_ResumeScreenResult"
+
+  /ai/knowledge-bases:
+    get:
+      tags: [AI]
+      summary: 知识库列表
+      operationId: listKnowledgeBases
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_KnowledgeBaseArray"
+
+  /ai/knowledge-bases/{id}/documents:
+    post:
+      tags: [AI]
+      summary: 上传知识库文档
+      operationId: uploadKnowledgeDocument
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      description: 上传文档后自动进行向量 embedding。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                title:
+                  type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_KnowledgeDocument"
+
+  # ==================== Dashboard ====================
+  /dashboard/stats:
+    get:
+      tags: [Employees]
+      summary: 工作台统计
+      operationId: getDashboardStats
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_DashboardStats"
+
+  /dashboard/todos:
+    get:
+      tags: [Employees]
+      summary: 今日待办
+      operationId: getDashboardTodos
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_TodoArray"
+
+  /dashboard/ai-insight:
+    get:
+      tags: [AI]
+      summary: AI 每日洞察
+      operationId: getDailyInsight
+      security:
+        - bearerAuth: []
+      description: AI 生成每日人事洞察摘要。预估 token：~1000。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_AiInsight"
+
+  /notifications/send:
+    post:
+      tags: [Employees]
+      summary: 发送通知
+      operationId: sendNotification
+      security:
+        - bearerAuth: []
+      description: 通过钉钉或短信推送通知。仅 hr/admin。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, channel, content]
+              properties:
+                user_id:
+                  type: string
+                channel:
+                  type: string
+                  enum: [dingtalk, sms]
+                content:
+                  type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Null"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    pageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    Unauthorized:
+      description: 未认证或 token 过期
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            data: null
+            error:
+              code: "AUTH_001"
+              message: "Token 已过期，请重新登录"
+              details: null
+    Forbidden:
+      description: 权限不足
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            data: null
+            error:
+              code: "AUTH_005"
+              message: "权限不足，无法访问该资源"
+              details: null
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            data: null
+            error:
+              code: "COMMON_404"
+              message: "请求的资源不存在"
+              details: null
+    ValidationError:
+      description: 请求参数校验失败
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            data: null
+            error:
+              code: "COMMON_422"
+              message: "请求参数校验失败"
+              details:
+                - field: "account"
+                  message: "工号或手机号不能为空"
+
+  schemas:
+    # ===== Common =====
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "AUTH_001"
+            message:
+              type: string
+              example: "用户不存在"
+            details:
+              nullable: true
+
+    ApiResponse_Null:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          nullable: true
+          example: null
+        error:
+          nullable: true
+          example: null
+
+    # ===== Auth =====
+    LoginData:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+          description: 过期时间（秒）
+          example: 7200
+        user:
+          $ref: "#/components/schemas/CurrentUser"
+
+    ApiResponse_LoginData:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/LoginData"
+        error:
+          nullable: true
+
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employee_id:
+          type: string
+          example: "E001"
+        name:
+          type: string
+          example: "张伟"
+        avatar:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [candidate, employee, manager, hr, interviewer, admin]
+        permissions:
+          type: array
+          items:
+            type: string
+
+    ApiResponse_CurrentUser:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/CurrentUser"
+        error:
+          nullable: true
+
+    # ===== Employee =====
+    EmployeeStatus:
+      type: string
+      enum: [active, on_leave, probation, resigned, suspended]
+
+    EmployeeListItem:
+      type: object
+      description: 员工列表项（脱敏视图）
+      properties:
+        id:
+          type: string
+          example: "E001"
+        name:
+          type: string
+          example: "张伟"
+        department:
+          type: string
+          example: "研发部"
+        position:
+          type: string
+          example: "高级后端工程师"
+        entity:
+          type: string
+          example: "武汉三工光电设备制造有限公司"
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        hire_date:
+          type: string
+          format: date
+        contract_end:
+          type: string
+          format: date
+        contract_status:
+          type: string
+          enum: [normal, expiring_soon, expired]
+        id_status:
+          type: string
+          enum: [normal, expiring_soon, expired]
+        sync_status:
+          type: string
+          enum: [synced, pending, diff, failed]
+        completeness:
+          type: integer
+          minimum: 0
+          maximum: 100
+        phone:
+          type: string
+          description: 脱敏手机号
+          example: "138****5678"
+        last_change:
+          type: string
+          nullable: true
+
+    EmployeeDetail:
+      type: object
+      description: 员工完整档案
+      allOf:
+        - $ref: "#/components/schemas/EmployeeListItem"
+        - type: object
+          properties:
+            gender:
+              type: string
+            birth:
+              type: string
+              format: date
+            id_number:
+              type: string
+              description: "身份证号（hr/admin 完整，其他角色脱敏）-- SENSITIVE"
+              example: "4301********1234"
+            id_start:
+              type: string
+              format: date
+            id_end:
+              type: string
+              format: date
+            education:
+              type: string
+              nullable: true
+            school:
+              type: string
+              nullable: true
+            major:
+              type: string
+              nullable: true
+            contract_start:
+              type: string
+              format: date
+            materials:
+              type: array
+              items:
+                $ref: "#/components/schemas/EmployeeMaterial"
+            diffs:
+              type: array
+              items:
+                $ref: "#/components/schemas/EmployeeDiff"
+            data_source_meta:
+              type: object
+              description: 每个字段的数据源和最后同步时间
+              additionalProperties:
+                type: object
+                properties:
+                  source:
+                    type: string
+                    enum: [dingtalk, system, ai_ocr]
+                  synced_at:
+                    type: string
+                    format: date-time
+
+    EmployeeMaterial:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [contract, id_card, diploma, cert]
+        file_name:
+          type: string
+        file_url:
+          type: string
+          description: 签名 URL，有效期 1 小时
+        ocr_result:
+          type: object
+          nullable: true
+        uploaded_at:
+          type: string
+          format: date-time
+
+    EmployeeDiff:
+      type: object
+      properties:
+        id:
+          type: string
+        field:
+          type: string
+        dingtalk_value:
+          type: string
+        system_value:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        action:
+          type: string
+          enum: [accept_dingtalk, keep_system]
+          nullable: true
+
+    ChangeRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          example: "转正"
+        detail:
+          type: string
+        date:
+          type: string
+          format: date
+
+    SyncResult:
+      type: object
+      properties:
+        task_id:
+          type: string
+        synced:
+          type: integer
+        diff:
+          type: integer
+        failed:
+          type: integer
+
+    BatchResult:
+      type: object
+      properties:
+        success_count:
+          type: integer
+        failed_count:
+          type: integer
+
+    MaterialUploadResult:
+      type: object
+      properties:
+        id:
+          type: string
+        file_url:
+          type: string
+        ocr_result:
+          type: object
+          nullable: true
+
+    ExportResult:
+      type: object
+      properties:
+        file_url:
+          type: string
+          description: 签名下载 URL，有效期 1 小时
+
+    # ===== Department =====
+    Department:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        level:
+          type: integer
+          minimum: 1
+          maximum: 6
+        head_employee_id:
+          type: string
+          nullable: true
+        employee_count:
+          type: integer
+
+    DepartmentTree:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Department"
+        - type: object
+          properties:
+            children:
+              type: array
+              items:
+                $ref: "#/components/schemas/DepartmentTree"
+
+    CreateDepartmentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        head_employee_id:
+          type: string
+          nullable: true
+
+    UpdateDepartmentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+        head_employee_id:
+          type: string
+
+    # ===== Attendance =====
+    AttendanceException:
+      type: object
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        date:
+          type: string
+          format: date
+        group:
+          type: string
+          description: 考勤组
+        clock_in:
+          type: string
+          nullable: true
+        clock_out:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [late, early_leave, absent, missing_clock, overtime]
+        status:
+          type: string
+          enum: [pending, waiting_employee, approving, done]
+        ai_suggestion:
+          type: string
+          nullable: true
+
+    AttendanceExceptionDetail:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/AttendanceException"
+        - type: object
+          properties:
+            ai_analysis:
+              type: object
+              properties:
+                suggestion:
+                  type: string
+                confidence:
+                  type: number
+                evidence:
+                  type: array
+                  items:
+                    type: string
+            timeline:
+              type: array
+              items:
+                type: object
+                properties:
+                  time:
+                    type: string
+                  event:
+                    type: string
+                  source:
+                    type: string
+
+    OvertimeRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        date:
+          type: string
+          format: date
+        group:
+          type: string
+        clock_in:
+          type: string
+        clock_out:
+          type: string
+        work_hours:
+          type: number
+        dept_type:
+          type: string
+          enum: [functional, production]
+        subsidy_type:
+          type: string
+          enum: [meal, time_off, cash]
+        subsidy_value:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        remark:
+          type: string
+          nullable: true
+
+    # ===== Performance =====
+    PerformanceOverview:
+      type: object
+      properties:
+        active_cycles:
+          type: integer
+        pending_forms:
+          type: integer
+        overdue_forms:
+          type: integer
+        ai_anomalies:
+          type: integer
+
+    Cycle:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: "2025 Q2 季度考核"
+        type:
+          type: string
+          enum: [quarterly, semi_annual, annual]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        scope:
+          type: string
+        status:
+          type: string
+          enum: [active, closed]
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/CycleStage"
+
+    CycleStage:
+      type: object
+      properties:
+        name:
+          type: string
+          enum: [self_review, leader_review, dept_review, hr_review, gm_confirm]
+        label:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, completed]
+        deadline:
+          type: string
+          format: date
+        completed_count:
+          type: integer
+        total_count:
+          type: integer
+        overdue_count:
+          type: integer
+
+    CycleDetail:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Cycle"
+        - type: object
+          properties:
+            forms:
+              type: array
+              items:
+                $ref: "#/components/schemas/PerformanceFormSummary"
+
+    PerformanceFormSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        department:
+          type: string
+        self_total:
+          type: number
+          nullable: true
+        leader_total:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [submitted, pending_leader, pending_dept, overdue, ai_anomaly]
+        anomaly:
+          type: string
+          nullable: true
+
+    PerformanceForm:
+      type: object
+      properties:
+        id:
+          type: string
+        cycle_id:
+          type: string
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        kpis:
+          type: array
+          items:
+            $ref: "#/components/schemas/KpiScore"
+        self_total:
+          type: number
+          nullable: true
+        leader_total:
+          type: number
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+        status:
+          type: string
+
+    KpiScore:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "MF-021"
+        name:
+          type: string
+        weight:
+          type: number
+          description: 权重百分比
+        target:
+          type: string
+        achievement:
+          type: string
+          nullable: true
+        source:
+          type: string
+        self_score:
+          type: number
+          nullable: true
+        leader_score:
+          type: number
+          nullable: true
+        ai_suggested:
+          type: number
+          nullable: true
+          description: AI 建议分数
+
+    SubmitFormRequest:
+      type: object
+      required: [kpis]
+      properties:
+        kpis:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              self_score:
+                type: number
+              leader_score:
+                type: number
+        comment:
+          type: string
+        is_draft:
+          type: boolean
+          default: false
+
+    ValidationResult:
+      type: object
+      properties:
+        anomalies:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [score_deviation, self_leader_gap, data_inconsistency]
+              kpi_code:
+                type: string
+              message:
+                type: string
+              severity:
+                type: string
+                enum: [warning, error]
+
+    RemindResult:
+      type: object
+      properties:
+        sent:
+          type: integer
+
+    CreateCycleRequest:
+      type: object
+      required: [name, type, start_date, end_date]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [quarterly, semi_annual, annual]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        departments:
+          type: array
+          items:
+            type: string
+        template:
+          type: string
+
+    StrategyKpi:
+      type: object
+      properties:
+        kpi:
+          type: string
+        target:
+          type: string
+        weight:
+          type: number
+
+    Strategy:
+      type: object
+      properties:
+        company:
+          type: object
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            period:
+              type: string
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/StrategyKpi"
+        departments:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeptStrategy"
+
+    DeptStrategy:
+      type: object
+      properties:
+        id:
+          type: string
+        dept_name:
+          type: string
+        head:
+          type: string
+        kpis:
+          type: array
+          items:
+            $ref: "#/components/schemas/StrategyKpi"
+
+    UpdateStrategyRequest:
+      type: object
+      properties:
+        company:
+          type: object
+          properties:
+            title:
+              type: string
+            period:
+              type: string
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/StrategyKpi"
+        departments:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeptStrategy"
+
+    Indicator:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "MF-021"
+        name:
+          type: string
+        family:
+          type: string
+        unit:
+          type: string
+        target:
+          type: string
+        source:
+          type: string
+        ai_tag:
+          type: string
+          nullable: true
+
+    CreateIndicatorRequest:
+      type: object
+      required: [code, name, family]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        family:
+          type: string
+        unit:
+          type: string
+        target:
+          type: string
+        source:
+          type: string
+
+    InterviewItem:
+      type: object
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        department:
+          type: string
+        score:
+          type: number
+        level:
+          type: string
+          enum: [A, B+, B, B-, C, D]
+        status:
+          type: string
+          enum: [pending, completed]
+        reason:
+          type: string
+          nullable: true
+
+    InterviewReport:
+      type: object
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        score:
+          type: number
+        level:
+          type: string
+        talking_points:
+          type: object
+          properties:
+            opening:
+              type: string
+            recognition:
+              type: string
+            improvement:
+              type: string
+            development:
+              type: string
+            commitment:
+              type: string
+        next_quarter_goals:
+          type: array
+          items:
+            type: object
+            properties:
+              goal:
+                type: string
+              actions:
+                type: array
+                items:
+                  type: string
+        result_application:
+          type: object
+          properties:
+            coefficient:
+              type: number
+            salary_band:
+              type: string
+            talent_action:
+              type: string
+            training_advice:
+              type: string
+        notes:
+          type: string
+          nullable: true
+
+    DataSource:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "MES"
+        status:
+          type: string
+          enum: [connected, disconnected]
+        last_sync:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ===== Recruitment =====
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        dept:
+          type: string
+        location:
+          type: string
+        headcount:
+          type: integer
+        salary:
+          type: string
+          nullable: true
+        urgency:
+          type: string
+          enum: [high, medium, low]
+        status:
+          type: string
+          enum: [recruiting, profile_pending, paused, completed]
+        owner:
+          type: string
+        has_profile:
+          type: boolean
+        resume_count:
+          type: integer
+        matched_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    JobDetail:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Job"
+        - type: object
+          properties:
+            jd:
+              type: string
+            profile:
+              $ref: "#/components/schemas/JobProfile"
+              nullable: true
+
+    JobProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        job_id:
+          type: string
+        dimensions:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              weight:
+                type: number
+              items:
+                type: array
+                items:
+                  type: string
+        generated_at:
+          type: string
+          format: date-time
+
+    CreateJobRequest:
+      type: object
+      required: [title, dept, location, headcount, urgency, owner]
+      properties:
+        title:
+          type: string
+        dept:
+          type: string
+        location:
+          type: string
+        headcount:
+          type: integer
+        salary:
+          type: string
+        urgency:
+          type: string
+          enum: [high, medium, low]
+        owner:
+          type: string
+        jd:
+          type: string
+
+    UpdateJobRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        dept:
+          type: string
+        location:
+          type: string
+        headcount:
+          type: integer
+        salary:
+          type: string
+        urgency:
+          type: string
+        status:
+          type: string
+        jd:
+          type: string
+
+    Resume:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+          description: 脱敏
+        file_url:
+          type: string
+        parse_status:
+          type: string
+          enum: [parsed, parsing, failed]
+        parsed_data:
+          type: object
+          nullable: true
+        uploaded_at:
+          type: string
+          format: date-time
+
+    Candidate:
+      type: object
+      properties:
+        id:
+          type: string
+        job_id:
+          type: string
+        resume_id:
+          type: string
+        name:
+          type: string
+        rank:
+          type: integer
+        match_score:
+          type: number
+        dim_scores:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              score:
+                type: number
+              max:
+                type: number
+        ai_comment:
+          type: string
+        status:
+          type: string
+
+    CandidateDetail:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Candidate"
+        - type: object
+          properties:
+            education:
+              type: array
+              items:
+                type: object
+                properties:
+                  school:
+                    type: string
+                  degree:
+                    type: string
+                  major:
+                    type: string
+                  year:
+                    type: string
+            experience:
+              type: array
+              items:
+                type: object
+                properties:
+                  company:
+                    type: string
+                  position:
+                    type: string
+                  duration:
+                    type: string
+                  description:
+                    type: string
+
+    UploadResumeResult:
+      type: object
+      properties:
+        uploaded:
+          type: integer
+        parsed:
+          type: integer
+        failed:
+          type: integer
+
+    ResumeScreenResult:
+      type: object
+      properties:
+        resume_id:
+          type: string
+        job_id:
+          type: string
+        overall_score:
+          type: number
+        highlights:
+          type: array
+          items:
+            type: string
+        risks:
+          type: array
+          items:
+            type: string
+        recommendation:
+          type: string
+          enum: [strongly_recommend, recommend, neutral, not_recommend]
+        disclaimer:
+          type: string
+          example: "此结果仅供参考，最终决定必须由人类做出"
+
+    # ===== Interview =====
+    Interview:
+      type: object
+      properties:
+        id:
+          type: string
+        candidate_id:
+          type: string
+        job_id:
+          type: string
+        interviewer_ids:
+          type: array
+          items:
+            type: string
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+        location:
+          type: string
+        type:
+          type: string
+          enum: [phone, onsite, video]
+        status:
+          type: string
+          enum: [scheduled, completed, cancelled]
+
+    CreateInterviewRequest:
+      type: object
+      required: [candidate_id, job_id, interviewer_ids, scheduled_at]
+      properties:
+        candidate_id:
+          type: string
+        job_id:
+          type: string
+        interviewer_ids:
+          type: array
+          items:
+            type: string
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          default: 60
+        location:
+          type: string
+        type:
+          type: string
+          enum: [phone, onsite, video]
+
+    InterviewFeedback:
+      type: object
+      properties:
+        id:
+          type: string
+        interview_id:
+          type: string
+        interviewer_id:
+          type: string
+        overall_score:
+          type: number
+        dimensions:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              score:
+                type: number
+              comment:
+                type: string
+        recommendation:
+          type: string
+          enum: [pass, fail, pending]
+        notes:
+          type: string
+
+    InterviewFeedbackRequest:
+      type: object
+      required: [overall_score, recommendation]
+      properties:
+        overall_score:
+          type: number
+        dimensions:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              score:
+                type: number
+              comment:
+                type: string
+        recommendation:
+          type: string
+          enum: [pass, fail, pending]
+        notes:
+          type: string
+
+    # ===== Training =====
+    TrainingOverview:
+      type: object
+      properties:
+        monthly_exams:
+          type: integer
+        pending_review:
+          type: integer
+        onsite_completion_rate:
+          type: number
+        avg_score:
+          type: number
+
+    TrainingTask:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [grading, compose, mentoring, archive, inspect]
+        title:
+          type: string
+        description:
+          type: string
+        due_date:
+          type: string
+          format: date
+
+    Exam:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        dept:
+          type: string
+        question_count:
+          type: integer
+        duration:
+          type: integer
+          description: 时长（分钟）
+        difficulty:
+          type: string
+          enum: [easy, mid, hard]
+        pass_line:
+          type: number
+        sites:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        avg_score:
+          type: number
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    GenerateExamRequest:
+      type: object
+      required: [category, question_count, difficulty]
+      properties:
+        category:
+          type: string
+        question_count:
+          type: integer
+        difficulty:
+          type: string
+          enum: [easy, mid, hard]
+        departments:
+          type: array
+          items:
+            type: string
+        sites:
+          type: array
+          items:
+            type: string
+
+    ComposeExamRequest:
+      type: object
+      required: [question_ids, title, duration, pass_line]
+      properties:
+        question_ids:
+          type: array
+          items:
+            type: string
+        title:
+          type: string
+        duration:
+          type: integer
+        pass_line:
+          type: number
+
+    GradingItem:
+      type: object
+      properties:
+        id:
+          type: string
+        exam_id:
+          type: string
+        exam_title:
+          type: string
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        question_id:
+          type: string
+        question_stem:
+          type: string
+        ai_score:
+          type: number
+        hr_score:
+          type: number
+          nullable: true
+        ai_comment:
+          type: string
+        hr_comment:
+          type: string
+          nullable: true
+        flagged:
+          type: boolean
+
+    Score:
+      type: object
+      properties:
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        exam_id:
+          type: string
+        exam_title:
+          type: string
+        total_score:
+          type: number
+        pass:
+          type: boolean
+        needs_retake:
+          type: boolean
+
+    CategoryTree:
+      type: object
+      properties:
+        category:
+          type: string
+        sub_categories:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              count:
+                type: integer
+
+    Question:
+      type: object
+      properties:
+        id:
+          type: string
+        category:
+          type: string
+        sub_category:
+          type: string
+        type:
+          type: string
+          enum: [single, multi, judge, essay]
+        difficulty:
+          type: string
+          enum: [easy, mid, hard]
+        stem:
+          type: string
+        knowledge_point:
+          type: string
+        answer:
+          type: string
+        uses:
+          type: integer
+        avg_score:
+          type: number
+        quality:
+          type: number
+        low_quality:
+          type: boolean
+
+    Material:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        file_url:
+          type: string
+        file_type:
+          type: string
+          enum: [PDF, Word, PPT]
+        page_count:
+          type: integer
+        uploaded_at:
+          type: string
+          format: date-time
+
+    Mentor:
+      type: object
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        name:
+          type: string
+        title:
+          type: string
+        dept:
+          type: string
+        site:
+          type: string
+        level:
+          type: string
+          enum: [gold, senior, certified]
+        years:
+          type: integer
+        active:
+          type: integer
+        capacity:
+          type: integer
+        graduated:
+          type: integer
+        rating:
+          type: number
+        pass_rate:
+          type: number
+        crafts:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [available, full, rest]
+
+    MentorDetail:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Mentor"
+        - type: object
+          properties:
+            reviews:
+              type: array
+              items:
+                type: object
+                properties:
+                  student_name:
+                    type: string
+                  score:
+                    type: number
+                  comment:
+                    type: string
+                  date:
+                    type: string
+                    format: date
+
+    CreateMentorRequest:
+      type: object
+      required: [employee_id, crafts, site]
+      properties:
+        employee_id:
+          type: string
+        crafts:
+          type: array
+          items:
+            type: string
+        site:
+          type: string
+        capacity:
+          type: integer
+          default: 3
+
+    OnsitePlan:
+      type: object
+      properties:
+        id:
+          type: string
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        mentor_id:
+          type: string
+        mentor_name:
+          type: string
+        start_date:
+          type: string
+          format: date
+        checkpoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/Checkpoint"
+
+    Checkpoint:
+      type: object
+      properties:
+        week:
+          type: integer
+        title:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, completed, skipped]
+        content:
+          type: string
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ===== AI =====
+    ChatSession:
+      type: object
+      properties:
+        id:
+          type: string
+        scene:
+          type: string
+        title:
+          type: string
+        pinned:
+          type: boolean
+        message_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ChatSessionDetail:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/ChatSession"
+        - type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: "#/components/schemas/ChatMessage"
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        text:
+          type: string
+        thinking:
+          type: string
+          nullable: true
+        sources:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              url:
+                type: string
+        card:
+          type: object
+          nullable: true
+          properties:
+            type:
+              type: string
+              enum: [candidate, exam, attendance, indicator]
+            data:
+              type: object
+        followups:
+          type: array
+          nullable: true
+          items:
+            type: string
+        token_usage:
+          type: object
+          nullable: true
+          properties:
+            prompt:
+              type: integer
+            completion:
+              type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    KnowledgeBase:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        document_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    KnowledgeDocument:
+      type: object
+      properties:
+        id:
+          type: string
+        knowledge_base_id:
+          type: string
+        title:
+          type: string
+        file_url:
+          type: string
+        chunk_count:
+          type: integer
+        embedding_status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        created_at:
+          type: string
+          format: date-time
+
+    AiInsight:
+      type: object
+      properties:
+        text:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+
+    # ===== Dashboard =====
+    DashboardStats:
+      type: object
+      properties:
+        pending_exceptions:
+          type: integer
+        recruiting_jobs:
+          type: integer
+        monthly_hires:
+          type: integer
+        performance_completion_rate:
+          type: number
+
+    Todo:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [attendance, recruitment, performance, leave]
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum: [high, medium, low]
+        due_date:
+          type: string
+          format: date
+          nullable: true
+
+    # ===== Wrapped responses (for $ref convenience) =====
+    ApiResponse_EmployeeDetail:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/EmployeeDetail" }
+        error: { nullable: true }
+
+    ApiResponse_SyncResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/SyncResult" }
+        error: { nullable: true }
+
+    ApiResponse_BatchResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/BatchResult" }
+        error: { nullable: true }
+
+    ApiResponse_MaterialUploadResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/MaterialUploadResult" }
+        error: { nullable: true }
+
+    ApiResponse_ExportResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/ExportResult" }
+        error: { nullable: true }
+
+    ApiResponse_DepartmentTreeArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/DepartmentTree" } }
+        error: { nullable: true }
+
+    ApiResponse_Department:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Department" }
+        error: { nullable: true }
+
+    ApiResponse_AttendanceExceptionDetail:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/AttendanceExceptionDetail" }
+        error: { nullable: true }
+
+    ApiResponse_AttendanceException:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/AttendanceException" }
+        error: { nullable: true }
+
+    ApiResponse_OvertimeRecord:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/OvertimeRecord" }
+        error: { nullable: true }
+
+    ApiResponse_PerformanceOverview:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/PerformanceOverview" }
+        error: { nullable: true }
+
+    ApiResponse_CycleArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/Cycle" } }
+        error: { nullable: true }
+
+    ApiResponse_Cycle:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Cycle" }
+        error: { nullable: true }
+
+    ApiResponse_CycleDetail:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/CycleDetail" }
+        error: { nullable: true }
+
+    ApiResponse_PerformanceForm:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/PerformanceForm" }
+        error: { nullable: true }
+
+    ApiResponse_ValidationResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/ValidationResult" }
+        error: { nullable: true }
+
+    ApiResponse_RemindResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/RemindResult" }
+        error: { nullable: true }
+
+    ApiResponse_Strategy:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Strategy" }
+        error: { nullable: true }
+
+    ApiResponse_DeptStrategyArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/DeptStrategy" } }
+        error: { nullable: true }
+
+    ApiResponse_Indicator:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Indicator" }
+        error: { nullable: true }
+
+    ApiResponse_InterviewItemArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/InterviewItem" } }
+        error: { nullable: true }
+
+    ApiResponse_InterviewReport:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/InterviewReport" }
+        error: { nullable: true }
+
+    ApiResponse_DataSourceArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/DataSource" } }
+        error: { nullable: true }
+
+    ApiResponse_Job:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Job" }
+        error: { nullable: true }
+
+    ApiResponse_JobDetail:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/JobDetail" }
+        error: { nullable: true }
+
+    ApiResponse_JobProfile:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/JobProfile" }
+        error: { nullable: true }
+
+    ApiResponse_CandidateArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/Candidate" } }
+        error: { nullable: true }
+
+    ApiResponse_CandidateDetail:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/CandidateDetail" }
+        error: { nullable: true }
+
+    ApiResponse_UploadResumeResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/UploadResumeResult" }
+        error: { nullable: true }
+
+    ApiResponse_Resume:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Resume" }
+        error: { nullable: true }
+
+    ApiResponse_ResumeScreenResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/ResumeScreenResult" }
+        error: { nullable: true }
+
+    ApiResponse_Interview:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Interview" }
+        error: { nullable: true }
+
+    ApiResponse_InterviewFeedback:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/InterviewFeedback" }
+        error: { nullable: true }
+
+    ApiResponse_TrainingOverview:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/TrainingOverview" }
+        error: { nullable: true }
+
+    ApiResponse_TrainingTaskArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/TrainingTask" } }
+        error: { nullable: true }
+
+    ApiResponse_Exam:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Exam" }
+        error: { nullable: true }
+
+    ApiResponse_GradingItemArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/GradingItem" } }
+        error: { nullable: true }
+
+    ApiResponse_GradingItem:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/GradingItem" }
+        error: { nullable: true }
+
+    ApiResponse_CategoryTreeArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/CategoryTree" } }
+        error: { nullable: true }
+
+    ApiResponse_QuestionArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/Question" } }
+        error: { nullable: true }
+
+    ApiResponse_Material:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Material" }
+        error: { nullable: true }
+
+    ApiResponse_MentorArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/Mentor" } }
+        error: { nullable: true }
+
+    ApiResponse_Mentor:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Mentor" }
+        error: { nullable: true }
+
+    ApiResponse_MentorDetail:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/MentorDetail" }
+        error: { nullable: true }
+
+    ApiResponse_OnsitePlanArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/OnsitePlan" } }
+        error: { nullable: true }
+
+    ApiResponse_Checkpoint:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Checkpoint" }
+        error: { nullable: true }
+
+    ApiResponse_ChatSession:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/ChatSession" }
+        error: { nullable: true }
+
+    ApiResponse_ChatSessionDetail:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/ChatSessionDetail" }
+        error: { nullable: true }
+
+    ApiResponse_KnowledgeBaseArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/KnowledgeBase" } }
+        error: { nullable: true }
+
+    ApiResponse_KnowledgeDocument:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/KnowledgeDocument" }
+        error: { nullable: true }
+
+    ApiResponse_DashboardStats:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/DashboardStats" }
+        error: { nullable: true }
+
+    ApiResponse_TodoArray:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: array, items: { $ref: "#/components/schemas/Todo" } }
+        error: { nullable: true }
+
+    ApiResponse_AiInsight:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/AiInsight" }
+        error: { nullable: true }
+
+    # ===== Paginated wrappers =====
+    PaginatedResponse_EmployeeListItem:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/EmployeeListItem" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_ChangeRecord:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ChangeRecord" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_AttendanceException:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AttendanceException" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_OvertimeRecord:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/OvertimeRecord" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_Indicator:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Indicator" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_Job:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Job" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_Resume:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Resume" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_Exam:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Exam" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_Score:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Score" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_Question:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Question" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_Material:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Material" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
+
+    PaginatedResponse_ChatSession:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ChatSession" } }
+            total: { type: integer }
+            page: { type: integer }
+            page_size: { type: integer }
+        error: { nullable: true }
