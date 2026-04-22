@@ -3,8 +3,9 @@
  * [BACKEND] 数据由后端 API 提供
  */
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import UploadAttendanceModal from "./UploadAttendanceModal";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -16,6 +17,7 @@ import { overtimeRows, dayoffRows } from "@/mocks/attendance";
 export default function OvertimeLeave() {
   const [subTab, setSubTab] = useState<"overtime" | "dayoff">("overtime");
   const [campusFilter, setCampusFilter] = useState("all");
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [posFilter, setPosFilter] = useState("all");
 
   const filteredOT = overtimeRows.filter((r) => {
@@ -26,6 +28,7 @@ export default function OvertimeLeave() {
   });
 
   return (
+    <>
     <div className="space-y-4">
       {/* 二级 Tab */}
       <div className="flex items-center justify-between">
@@ -44,10 +47,16 @@ export default function OvertimeLeave() {
             </button>
           ))}
         </div>
-        <Button variant="outline" size="sm" className="gap-1.5">
-          <Download className="h-4 w-4" />
-          导出 Excel
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" className="gap-1.5" onClick={() => setUploadOpen(true)}>
+            <Upload className="h-4 w-4" />
+            上传月度考勤表
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <Download className="h-4 w-4" />
+            导出 Excel
+          </Button>
+        </div>
       </div>
 
       {subTab === "overtime" ? (
@@ -138,5 +147,8 @@ export default function OvertimeLeave() {
         </div>
       )}
     </div>
+
+      <UploadAttendanceModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+    </>
   );
 }
