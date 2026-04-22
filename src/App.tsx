@@ -24,6 +24,7 @@ import TrainingOffsite from "./pages/TrainingOffsite";
 import TrainingQuestionBank from "./pages/TrainingQuestionBank";
 import TrainingOnsite from "./pages/TrainingOnsite";
 import TrainingMentors from "./pages/TrainingMentors";
+import KnowledgeBase from "./pages/KnowledgeBase";
 import ChatNew from "./pages/ChatNew";
 import ChatHistory from "./pages/ChatHistory";
 import NotFound from "./pages/NotFound.tsx";
@@ -57,6 +58,7 @@ const App = () => (
             <Route path="/training/question-bank" element={<TrainingQuestionBank />} />
             <Route path="/training/onsite" element={<TrainingOnsite />} />
             <Route path="/training/mentors" element={<TrainingMentors />} />
+            <Route path="/knowledge" element={<KnowledgeBase />} />
             <Route path="/chat/new" element={<ChatNew />} />
             <Route path="/chat/history" element={<ChatHistory />} />
           </Route>
