@@ -12,6 +12,11 @@ import {
   Clock,
   TrendingUp,
   Wand2,
+  X,
+  Check,
+  AlertCircle,
+  GripVertical,
+  PlayCircle,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -21,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +59,19 @@ interface Job {
   createdAt: string;
   owner: string;
   hasProfile: boolean;
+}
+
+interface ProfileItem {
+  id: string;
+  text: string;
+}
+
+interface Dimension {
+  key: string;
+  label: string;
+  weight: number;
+  threshold: number;
+  desc: string;
 }
 
 const jobs: Job[] = [
@@ -153,6 +172,35 @@ const urgencyStyle: Record<string, string> = {
   高: "text-[hsl(var(--danger))]",
   中: "text-[hsl(var(--warning-foreground))]",
   低: "text-muted-foreground",
+};
+
+// [FRONTEND-ONLY] AI 生成画像的 mock 数据
+const mockAIProfile = {
+  summary:
+    "该岗位偏向资深前端 + 技术管理过渡方向，建议优先考虑大厂背景、有 React 深度实践的候选人。已识别 4 项硬性要求、4 项加分项、2 项排除项，推荐权重以「技能匹配」与「工作经验」为主。",
+  hardReqs: [
+    { id: "h1", text: "本科及以上学历，计算机相关专业" },
+    { id: "h2", text: "5 年以上前端开发经验" },
+    { id: "h3", text: "精通 React 与 TypeScript" },
+    { id: "h4", text: "工作地点：上海" },
+  ],
+  bonus: [
+    { id: "b1", text: "有大型 C 端项目经验" },
+    { id: "b2", text: "有团队管理经验" },
+    { id: "b3", text: "熟悉 Vue / Next.js" },
+    { id: "b4", text: "活跃的开源贡献" },
+  ],
+  excludes: [
+    { id: "e1", text: "工作经验少于 3 年" },
+    { id: "e2", text: "近 3 年平均跳槽周期 < 12 个月" },
+  ],
+  dims: [
+    { key: "skill", label: "技能匹配", weight: 35, threshold: 60, desc: "技术栈与岗位要求的吻合度" },
+    { key: "exp", label: "工作经验", weight: 25, threshold: 50, desc: "年限与项目背景" },
+    { key: "edu", label: "教育背景", weight: 15, threshold: 40, desc: "学历与院校层次" },
+    { key: "stable", label: "稳定性", weight: 15, threshold: 50, desc: "平均在职时长" },
+    { key: "salary", label: "薪资契合", weight: 10, threshold: 30, desc: "期望薪资落在岗位区间内" },
+  ],
 };
 
 export default function Recruiting() {
@@ -299,6 +347,8 @@ export default function Recruiting() {
   );
 }
 
+/* ─── CreateJobDialog：新建岗位需求 + 内嵌 AI 画像生成 ─── */
+
 interface CreateJobDialogProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -306,6 +356,9 @@ interface CreateJobDialogProps {
 }
 
 function CreateJobDialog({ open, onOpenChange, onCreated }: CreateJobDialogProps) {
+  const navigate = useNavigate();
+
+  // 基础信息
   const [title, setTitle] = useState("");
   const [deptVal, setDeptVal] = useState("");
   const [location, setLocation] = useState("");
@@ -315,12 +368,53 @@ function CreateJobDialog({ open, onOpenChange, onCreated }: CreateJobDialogProps
   const [owner, setOwner] = useState("");
   const [jd, setJd] = useState("");
 
+  // AI 画像
+  const [profileGenerated, setProfileGenerated] = useState(false);
+  const [aiSummary, setAiSummary] = useState("");
+  const [hardReqs, setHardReqs] = useState<ProfileItem[]>([]);
+  const [bonus, setBonus] = useState<ProfileItem[]>([]);
+  const [excludes, setExcludes] = useState<ProfileItem[]>([]);
+  const [dims, setDims] = useState<Dimension[]>([]);
+
+  const totalWeight = dims.reduce((s, d) => s + d.weight, 0);
+
   const reset = () => {
     setTitle(""); setDeptVal(""); setLocation(""); setHeadcount("1");
     setSalary(""); setUrgency("中"); setOwner(""); setJd("");
+    setProfileGenerated(false); setAiSummary("");
+    setHardReqs([]); setBonus([]); setExcludes([]); setDims([]);
   };
 
   const canSubmit = title.trim() && deptVal && location.trim() && Number(headcount) > 0;
+
+  // [FRONTEND-ONLY] AI 生成画像（mock）— 保留用户已调整的 weight/threshold
+  const handleGenerateProfile = () => {
+    if (!jd.trim()) {
+      toast({ title: "请先填写岗位 JD", description: "AI 需要 JD 内容来生成岗位画像", variant: "destructive" });
+      return;
+    }
+
+    // 保留用户已调整过的维度配置
+    const existingDimMap = new Map(dims.map((d) => [d.key, d]));
+
+    const newDims = mockAIProfile.dims.map((aiDim) => {
+      const existing = existingDimMap.get(aiDim.key);
+      if (existing) {
+        // 保留用户调整过的 weight 和 threshold，刷新 label/desc
+        return { ...aiDim, weight: existing.weight, threshold: existing.threshold };
+      }
+      return { ...aiDim };
+    });
+
+    setAiSummary(mockAIProfile.summary);
+    setHardReqs(mockAIProfile.hardReqs.map((r) => ({ ...r })));
+    setBonus(mockAIProfile.bonus.map((r) => ({ ...r })));
+    setExcludes(mockAIProfile.excludes.map((r) => ({ ...r })));
+    setDims(newDims);
+    setProfileGenerated(true);
+
+    toast({ title: "AI 已生成岗位画像", description: "可继续调整权重与阈值" });
+  };
 
   const submit = (goProfile: boolean) => {
     if (!canSubmit) {
@@ -330,11 +424,41 @@ function CreateJobDialog({ open, onOpenChange, onCreated }: CreateJobDialogProps
     const newId = `J${String(Date.now()).slice(-3)}`;
     toast({
       title: "岗位需求已创建",
-      description: goProfile ? "正在跳转到岗位画像页…" : `${title} · ${deptVal} · 招 ${headcount} 人`,
+      description: profileGenerated
+        ? `${title} · 画像已生成 · ${dims.length} 个评分维度`
+        : `${title} · ${deptVal} · 招 ${headcount} 人`,
     });
     reset();
     onCreated(newId, goProfile);
   };
+
+  const submitAndMatch = () => {
+    if (!canSubmit) {
+      toast({ title: "请完善必填信息", variant: "destructive" });
+      return;
+    }
+    const newId = `J${String(Date.now()).slice(-3)}`;
+    toast({ title: "已开始智能筛选", description: "正在从简历库匹配候选人..." });
+    reset();
+    onOpenChange(false);
+    navigate(`/recruiting/job/${newId}/candidates`);
+  };
+
+  const addItem = (
+    setter: React.Dispatch<React.SetStateAction<ProfileItem[]>>,
+    prefix: string,
+  ) => setter((arr) => [...arr, { id: `${prefix}${Date.now()}`, text: "" }]);
+
+  const updateItem = (
+    setter: React.Dispatch<React.SetStateAction<ProfileItem[]>>,
+    id: string,
+    text: string,
+  ) => setter((arr) => arr.map((it) => (it.id === id ? { ...it, text } : it)));
+
+  const removeItem = (
+    setter: React.Dispatch<React.SetStateAction<ProfileItem[]>>,
+    id: string,
+  ) => setter((arr) => arr.filter((it) => it.id !== id));
 
   return (
     <Dialog
@@ -344,110 +468,291 @@ function CreateJobDialog({ open, onOpenChange, onCreated }: CreateJobDialogProps
         onOpenChange(v);
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>新建岗位需求</DialogTitle>
           <DialogDescription>
-            填写岗位基本信息和 JD，提交后可由 AI 自动生成岗位画像
+            填写岗位基本信息和 JD，可直接由 AI 生成岗位画像并调整评分维度
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 py-2">
-          <Field label="岗位名称" required className="col-span-2">
-            <Input
-              placeholder="如：高级前端工程师"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </Field>
+        <div className="space-y-5 py-2">
+          {/* ── 基础信息 ── */}
+          <div>
+            <SectionTitle title="基础信息" />
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+              <Field label="岗位名称" required className="col-span-2">
+                <Input placeholder="如：高级前端工程师" value={title} onChange={(e) => setTitle(e.target.value)} />
+              </Field>
+              <Field label="所属部门" required>
+                <Select value={deptVal} onValueChange={setDeptVal}>
+                  <SelectTrigger><SelectValue placeholder="选择部门" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="技术中心">技术中心</SelectItem>
+                    <SelectItem value="运营中心">运营中心</SelectItem>
+                    <SelectItem value="职能部门">职能部门</SelectItem>
+                    <SelectItem value="生产一线">生产一线</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="工作地点" required>
+                <Input placeholder="如：上海" value={location} onChange={(e) => setLocation(e.target.value)} />
+              </Field>
+              <Field label="招聘人数" required>
+                <Input type="number" min={1} value={headcount} onChange={(e) => setHeadcount(e.target.value)} />
+              </Field>
+              <Field label="薪资范围">
+                <Input placeholder="如：25-40K" value={salary} onChange={(e) => setSalary(e.target.value)} />
+              </Field>
+              <Field label="紧急程度">
+                <Select value={urgency} onValueChange={(v) => setUrgency(v as typeof urgency)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="高">高急（2 周内到岗）</SelectItem>
+                    <SelectItem value="中">中（1 个月内到岗）</SelectItem>
+                    <SelectItem value="低">低（无明确节点）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="招聘负责人">
+                <Input placeholder="输入 HR 姓名" value={owner} onChange={(e) => setOwner(e.target.value)} />
+              </Field>
+            </div>
+          </div>
 
-          <Field label="所属部门" required>
-            <Select value={deptVal} onValueChange={setDeptVal}>
-              <SelectTrigger><SelectValue placeholder="选择部门" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="技术中心">技术中心</SelectItem>
-                <SelectItem value="运营中心">运营中心</SelectItem>
-                <SelectItem value="职能部门">职能部门</SelectItem>
-                <SelectItem value="生产一线">生产一线</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Field label="工作地点" required>
-            <Input
-              placeholder="如：上海"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            />
-          </Field>
-
-          <Field label="招聘人数" required>
-            <Input
-              type="number"
-              min={1}
-              value={headcount}
-              onChange={(e) => setHeadcount(e.target.value)}
-            />
-          </Field>
-
-          <Field label="薪资范围">
-            <Input
-              placeholder="如：25-40K"
-              value={salary}
-              onChange={(e) => setSalary(e.target.value)}
-            />
-          </Field>
-
-          <Field label="紧急程度">
-            <Select value={urgency} onValueChange={(v) => setUrgency(v as typeof urgency)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="高">高急（2 周内到岗）</SelectItem>
-                <SelectItem value="中">中（1 个月内到岗）</SelectItem>
-                <SelectItem value="低">低（无明确节点）</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Field label="招聘负责人">
-            <Input
-              placeholder="输入 HR 姓名"
-              value={owner}
-              onChange={(e) => setOwner(e.target.value)}
-            />
-          </Field>
-
-          <Field label="岗位 JD" hint="可粘贴现有 JD，AI 将基于此生成岗位画像" className="col-span-2">
+          {/* ── 岗位 JD ── */}
+          <div>
+            <div className="flex items-center justify-between">
+              <SectionTitle title="岗位 JD" />
+              <Button size="sm" variant="outline" onClick={handleGenerateProfile}>
+                <Wand2 className="h-4 w-4 text-[hsl(var(--ai))]" />
+                {profileGenerated ? "AI 重新生成画像" : "AI 生成岗位画像"}
+              </Button>
+            </div>
             <Textarea
-              placeholder="岗位职责：&#10;1. ...&#10;&#10;任职要求：&#10;1. ..."
+              placeholder={"岗位职责：\n1. ...\n\n任职要求：\n1. ..."}
               value={jd}
               onChange={(e) => setJd(e.target.value)}
-              className="min-h-[140px] text-sm"
+              className="mt-3 min-h-[140px] text-sm"
             />
-          </Field>
-        </div>
-
-        <div className="ai-card flex items-start gap-2">
-          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--ai))]" />
-          <div className="text-xs leading-relaxed text-foreground/80">
-            提交后选择「<strong>保存并生成画像</strong>」，AI 将从 JD 中提取硬性要求 / 加分项 / 排除项，
-            并生成评分维度权重，可直接进入候选人智能匹配。
+            {!profileGenerated && (
+              <div className="ai-card mt-3 flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--ai))]" />
+                <div className="text-xs leading-relaxed text-foreground/80">
+                  填写 JD 后点击「AI 生成岗位画像」，AI 将自动提取硬性要求 / 加分项 / 排除项，
+                  并生成评分维度权重与合格阈值，可在创建流程中直接调整。
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* ── AI 画像（生成后展示） ── */}
+          {profileGenerated && (
+            <>
+              {/* AI 摘要 */}
+              <div className="ai-card flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--ai))]" />
+                <div>
+                  <div className="text-sm font-medium text-[hsl(var(--ai))]">AI 画像摘要</div>
+                  <p className="mt-1 text-sm leading-relaxed text-foreground/80">{aiSummary}</p>
+                </div>
+              </div>
+
+              {/* 三组规则 */}
+              <div>
+                <SectionTitle title="筛选规则" />
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <RuleGroup
+                    title="硬性要求" hint="必须满足" tone="success" icon={Check}
+                    items={hardReqs}
+                    onAdd={() => addItem(setHardReqs, "h")}
+                    onChange={(id, t) => updateItem(setHardReqs, id, t)}
+                    onRemove={(id) => removeItem(setHardReqs, id)}
+                  />
+                  <RuleGroup
+                    title="加分项" hint="提升评分" tone="info" icon={Plus}
+                    items={bonus}
+                    onAdd={() => addItem(setBonus, "b")}
+                    onChange={(id, t) => updateItem(setBonus, id, t)}
+                    onRemove={(id) => removeItem(setBonus, id)}
+                  />
+                  <RuleGroup
+                    title="排除项" hint="自动过滤" tone="danger" icon={X}
+                    items={excludes}
+                    onAdd={() => addItem(setExcludes, "e")}
+                    onChange={(id, t) => updateItem(setExcludes, id, t)}
+                    onRemove={(id) => removeItem(setExcludes, id)}
+                  />
+                </div>
+              </div>
+
+              {/* 评分维度 */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <SectionTitle title="匹配评分维度" />
+                  <Badge
+                    variant="outline"
+                    className={
+                      totalWeight === 100
+                        ? "bg-success-soft text-[hsl(var(--success))] border-[hsl(var(--success)/0.3)]"
+                        : "bg-warning-soft text-[hsl(var(--warning-foreground))] border-[hsl(var(--warning)/0.4)]"
+                    }
+                  >
+                    {totalWeight === 100 ? <Check className="mr-1 h-3 w-3" /> : <AlertCircle className="mr-1 h-3 w-3" />}
+                    总权重 {totalWeight}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  调整权重影响最终得分排序，阈值为该维度最低合格线（低于阈值的候选人将标记为弱匹配）
+                </p>
+                <div className="mt-3 space-y-3">
+                  {dims.map((d, idx) => (
+                    <div key={d.key} className="rounded-md border bg-muted/20 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <GripVertical className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <div className="text-sm font-medium">{d.label}</div>
+                            <div className="text-xs text-muted-foreground">{d.desc}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">权重</span>
+                            <span className="font-semibold tabular-nums text-primary">{d.weight}%</span>
+                          </div>
+                          <Slider
+                            value={[d.weight]}
+                            max={100}
+                            step={5}
+                            onValueChange={([v]) =>
+                              setDims((arr) => arr.map((x, i) => (i === idx ? { ...x, weight: v } : x)))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">合格阈值</span>
+                            <span className="font-semibold tabular-nums text-[hsl(var(--warning-foreground))]">{d.threshold}分</span>
+                          </div>
+                          <Slider
+                            value={[d.threshold]}
+                            max={100}
+                            step={5}
+                            onValueChange={([v]) =>
+                              setDims((arr) => arr.map((x, i) => (i === idx ? { ...x, threshold: v } : x)))
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:justify-between">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>取消</Button>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => submit(false)}>
-              仅保存草稿
-            </Button>
-            <Button onClick={() => submit(true)}>
-              <Wand2 className="h-4 w-4" />保存并生成画像
-            </Button>
+            <Button variant="outline" onClick={() => submit(false)}>仅保存草稿</Button>
+            {profileGenerated ? (
+              <>
+                <Button variant="outline" onClick={() => submit(true)}>
+                  <Wand2 className="h-4 w-4" />保存并编辑画像
+                </Button>
+                <Button onClick={submitAndMatch}>
+                  <PlayCircle className="h-4 w-4" />保存并开始筛选
+                </Button>
+              </>
+            ) : (
+              <Button onClick={() => submit(true)}>
+                <Wand2 className="h-4 w-4" />保存并生成画像
+              </Button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ─── 通用子组件 ─── */
+
+function SectionTitle({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-4 w-1 rounded-full bg-primary" />
+      <span className="text-sm font-medium">{title}</span>
+    </div>
+  );
+}
+
+function RuleGroup({
+  title,
+  hint,
+  tone,
+  icon: Icon,
+  items,
+  onAdd,
+  onChange,
+  onRemove,
+}: {
+  title: string;
+  hint: string;
+  tone: "success" | "info" | "danger";
+  icon: typeof Check;
+  items: ProfileItem[];
+  onAdd: () => void;
+  onChange: (id: string, text: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const toneMap = {
+    success: "bg-success-soft text-[hsl(var(--success))]",
+    info: "bg-info-soft text-[hsl(var(--info))]",
+    danger: "bg-danger-soft text-[hsl(var(--danger))]",
+  };
+  return (
+    <Card className="flex flex-col p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <div className={`flex h-6 w-6 items-center justify-center rounded ${toneMap[tone]}`}>
+            <Icon className="h-3.5 w-3.5" />
+          </div>
+          <div>
+            <div className="text-sm font-medium">{title}</div>
+            <div className="text-[10px] text-muted-foreground">{hint}</div>
+          </div>
+        </div>
+        <Badge variant="secondary" className="text-[11px]">{items.length}</Badge>
+      </div>
+      <div className="flex-1 space-y-1.5">
+        {items.map((it) => (
+          <div key={it.id} className="group flex items-center gap-1">
+            <Input
+              value={it.text}
+              onChange={(e) => onChange(it.id, e.target.value)}
+              className="h-8 text-xs"
+              placeholder="输入规则…"
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100"
+              onClick={() => onRemove(it.id)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <Button size="sm" variant="ghost" className="mt-2 w-full" onClick={onAdd}>
+        <Plus className="h-3.5 w-3.5" />添加
+      </Button>
+    </Card>
   );
 }
 
@@ -475,7 +780,6 @@ function Field({
     </div>
   );
 }
-
 
 function StatCard({
   icon: Icon,
