@@ -11,6 +11,8 @@ export type Campus = "武汉总部" | "鄂州工厂";
 export type PositionType = "生产岗" | "质检岗" | "销售岗" | "行政岗" | "研发岗";
 
 export type DayStatus = "normal" | "late" | "overtime" | "leave" | "dayoff" | "weekend";
+export type LeaveType = "事假" | "病假" | "年假";
+export type AnomalyProcessStatus = "待处理" | "已核销" | "已扣款";
 
 export interface ExceptionRow {
   id: string;
@@ -27,10 +29,44 @@ export interface ExceptionRow {
 
 export interface DayCell {
   day: number;
+  weekday: number; // 0=Sun 6=Sat
   status: DayStatus;
+  scheduledIn?: string;
+  scheduledOut?: string;
   clockIn?: string;
   clockOut?: string;
+  workHours?: number;
   aiTip?: string;
+  leaveType?: LeaveType;
+  anomalyMinutes?: number;
+}
+
+export interface AnomalyRecord {
+  day: number;
+  weekdayLabel: string;
+  type: string;
+  description: string;
+  processStatus: AnomalyProcessStatus;
+  aiSuggestion: string;
+  evidence?: string;
+}
+
+export interface OvertimeTimelineEntry {
+  day: number;
+  type: "overtime" | "dayoff";
+  hours: number;
+  description: string;
+  linkedDay?: number;
+  canApply?: boolean;
+}
+
+export interface EmployeeStats {
+  attendanceDays: number;
+  totalDays: number;
+  totalWorkHours: number;
+  anomalyCount: number;
+  overtimeHours: number;
+  pendingCount: number;
 }
 
 export interface HeatmapEmployee {
@@ -41,6 +77,16 @@ export interface HeatmapEmployee {
   anomalyCount: number;
   avatarColor: string;
   days: DayCell[];
+  // Extended fields for detail card
+  employeeNo: string;
+  hireDate: string;
+  supervisor: string;
+  dingId: string;
+  accessCardNo: string;
+  dept: string;
+  stats: EmployeeStats;
+  anomalies: AnomalyRecord[];
+  timeline: OvertimeTimelineEntry[];
 }
 
 export interface OvertimeRow {
@@ -80,7 +126,290 @@ export interface AttendanceRule {
   enabled: boolean;
 }
 
-// ========== Mock 数据 ==========
+// ========== Helper: April 2026 weekday lookup ==========
+// April 2026: 1=Wed, 2=Thu, ... 
+function aprilWeekday(day: number): number {
+  return new Date(2026, 3, day).getDay();
+}
+
+function isWeekend(day: number): boolean {
+  const wd = aprilWeekday(day);
+  return wd === 0 || wd === 6;
+}
+
+const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+// ========== Deterministic employee day data ==========
+
+interface DaySpec {
+  day: number;
+  status: DayStatus;
+  clockIn?: string;
+  clockOut?: string;
+  aiTip?: string;
+  leaveType?: LeaveType;
+  anomalyMinutes?: number;
+}
+
+function buildDays(specs: DaySpec[]): DayCell[] {
+  const specMap = new Map(specs.map(s => [s.day, s]));
+  const days: DayCell[] = [];
+  for (let d = 1; d <= 30; d++) {
+    const wd = aprilWeekday(d);
+    const spec = specMap.get(d);
+    if (spec) {
+      days.push({
+        day: d,
+        weekday: wd,
+        status: spec.status,
+        scheduledIn: isWeekend(d) ? undefined : "09:00",
+        scheduledOut: isWeekend(d) ? undefined : "18:00",
+        clockIn: spec.clockIn,
+        clockOut: spec.clockOut,
+        workHours: spec.status === "leave" || spec.status === "weekend" ? 0 :
+          spec.status === "dayoff" ? 0 :
+          spec.clockIn && spec.clockOut && spec.clockOut !== "—" && spec.clockIn !== "—"
+            ? Math.round((parseFloat(spec.clockOut.split(":")[0]) + parseFloat(spec.clockOut.split(":")[1]) / 60
+              - parseFloat(spec.clockIn.split(":")[0]) - parseFloat(spec.clockIn.split(":")[1]) / 60) * 10) / 10
+            : 0,
+        aiTip: spec.aiTip,
+        leaveType: spec.leaveType,
+        anomalyMinutes: spec.anomalyMinutes,
+      });
+    } else if (isWeekend(d)) {
+      days.push({ day: d, weekday: wd, status: "weekend" });
+    } else {
+      days.push({
+        day: d,
+        weekday: wd,
+        status: "normal",
+        scheduledIn: "09:00",
+        scheduledOut: "18:00",
+        clockIn: "08:55",
+        clockOut: "18:05",
+        workHours: 9.2,
+      });
+    }
+  }
+  return days;
+}
+
+function buildAnomalies(days: DayCell[]): AnomalyRecord[] {
+  const anomalies: AnomalyRecord[] = [];
+  const aiTips: Record<string, { suggestion: string; evidence?: string }> = {
+    late: { suggestion: "门禁有早于打卡的记录，建议申请补卡", evidence: "门禁记录显示提前到达" },
+    leave: { suggestion: "存在请假审批记录，建议核销" },
+    dayoff: { suggestion: "调休已关联加班记录" },
+  };
+  const statusMap: Record<number, AnomalyProcessStatus> = {};
+  let i = 0;
+  for (const d of days) {
+    if (d.status === "late" || d.status === "leave") {
+      const statuses: AnomalyProcessStatus[] = ["待处理", "已核销", "已扣款"];
+      const ps = statuses[i % 3];
+      statusMap[d.day] = ps;
+      i++;
+      const type = d.status === "late" ? (d.anomalyMinutes ? `迟到 ${d.anomalyMinutes} 分钟` : "迟到") : 
+        d.leaveType ? `${d.leaveType}` : "请假";
+      const desc = d.status === "late"
+        ? `上班打卡 ${d.clockIn}，迟到 ${d.anomalyMinutes || 0} 分钟`
+        : `${d.leaveType || "事假"}一天`;
+      const tip = aiTips[d.status] || { suggestion: "建议联系员工确认" };
+      anomalies.push({
+        day: d.day,
+        weekdayLabel: weekdayLabels[d.weekday],
+        type,
+        description: desc,
+        processStatus: ps,
+        aiSuggestion: tip.suggestion,
+        evidence: tip.evidence,
+      });
+    }
+  }
+  return anomalies;
+}
+
+function buildTimeline(days: DayCell[]): OvertimeTimelineEntry[] {
+  const entries: OvertimeTimelineEntry[] = [];
+  const overtimeDays = days.filter(d => d.status === "overtime");
+  const dayoffDays = days.filter(d => d.status === "dayoff");
+
+  for (const ot of overtimeDays) {
+    const hours = ot.workHours || 4;
+    const linked = dayoffDays.find(df => df.day > ot.day);
+    entries.push({
+      day: ot.day,
+      type: "overtime",
+      hours,
+      description: isWeekend(ot.day) ? `周末加班 ${hours}h` : `工作日加班 ${hours}h`,
+      linkedDay: linked?.day,
+      canApply: !linked,
+    });
+  }
+  for (const df of dayoffDays) {
+    const linked = overtimeDays.find(ot => ot.day < df.day);
+    entries.push({
+      day: df.day,
+      type: "dayoff",
+      hours: 4,
+      description: `使用调休 4h`,
+      linkedDay: linked?.day,
+    });
+  }
+  return entries.sort((a, b) => a.day - b.day);
+}
+
+function buildStats(days: DayCell[], anomalyCount: number): EmployeeStats {
+  const attendanceDays = days.filter(d => d.status === "normal" || d.status === "late" || d.status === "overtime").length;
+  const totalWorkHours = days.reduce((sum, d) => sum + (d.workHours || 0), 0);
+  const overtimeHours = days.filter(d => d.status === "overtime").reduce((sum, d) => sum + (d.workHours || 0), 0);
+  const pendingCount = Math.min(3, Math.ceil(anomalyCount / 2));
+  return { attendanceDays, totalDays: 30, totalWorkHours: Math.round(totalWorkHours), anomalyCount, overtimeHours: Math.round(overtimeHours), pendingCount };
+}
+
+// ========== 7 employees with deterministic data ==========
+
+const zhangSanSpecs: DaySpec[] = [
+  { day: 2, status: "late", clockIn: "09:35", clockOut: "18:30", aiTip: "迟到35分钟", anomalyMinutes: 35 },
+  { day: 4, status: "overtime", clockIn: "09:00", clockOut: "21:00", aiTip: "周末加班安排" },
+  { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班4h" },
+  { day: 7, status: "late", clockIn: "09:20", clockOut: "18:00", aiTip: "迟到20分钟，门禁09:05", anomalyMinutes: 20 },
+  { day: 10, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
+  { day: 14, status: "late", clockIn: "09:45", clockOut: "18:30", aiTip: "迟到45分钟", anomalyMinutes: 45 },
+  { day: 17, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
+  { day: 19, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
+  { day: 21, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "迟到15分钟，门禁08:58", anomalyMinutes: 15 },
+  { day: 23, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休，关联4/5加班" },
+  { day: 25, status: "late", clockIn: "09:30", clockOut: "18:00", aiTip: "迟到30分钟", anomalyMinutes: 30 },
+  { day: 28, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
+  { day: 30, status: "late", clockIn: "09:10", clockOut: "18:00", aiTip: "迟到10分钟", anomalyMinutes: 10 },
+];
+
+const liSiSpecs: DaySpec[] = [
+  { day: 3, status: "late", clockIn: "09:25", clockOut: "18:00", aiTip: "迟到25分钟", anomalyMinutes: 25 },
+  { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
+  { day: 8, status: "leave", clockIn: "—", clockOut: "—", aiTip: "年假一天", leaveType: "年假" },
+  { day: 12, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
+  { day: 15, status: "late", clockIn: "09:40", clockOut: "18:00", aiTip: "迟到40分钟", anomalyMinutes: 40 },
+  { day: 18, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
+  { day: 22, status: "late", clockIn: "09:12", clockOut: "18:00", aiTip: "迟到12分钟", anomalyMinutes: 12 },
+  { day: 24, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
+  { day: 29, status: "late", clockIn: "09:18", clockOut: "18:00", aiTip: "迟到18分钟", anomalyMinutes: 18 },
+];
+
+const wangWuSpecs: DaySpec[] = [
+  { day: 1, status: "late", clockIn: "09:30", clockOut: "18:00", aiTip: "迟到30分钟", anomalyMinutes: 30 },
+  { day: 6, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
+  { day: 11, status: "overtime", clockIn: "08:30", clockOut: "21:00", aiTip: "加班3小时" },
+  { day: 12, status: "overtime", clockIn: "09:00", clockOut: "16:00", aiTip: "周末加班" },
+  { day: 14, status: "late", clockIn: "09:22", clockOut: "18:00", aiTip: "迟到22分钟，门禁09:10", anomalyMinutes: 22 },
+  { day: 16, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
+  { day: 20, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
+  { day: 23, status: "late", clockIn: "09:35", clockOut: "18:30", aiTip: "迟到35分钟", anomalyMinutes: 35 },
+  { day: 28, status: "leave", clockIn: "—", clockOut: "—", aiTip: "年假一天", leaveType: "年假" },
+];
+
+const zhaoLiuSpecs: DaySpec[] = [
+  { day: 1, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "迟到15分钟", anomalyMinutes: 15 },
+  { day: 3, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
+  { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
+  { day: 7, status: "late", clockIn: "09:40", clockOut: "18:00", aiTip: "迟到40分钟", anomalyMinutes: 40 },
+  { day: 9, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
+  { day: 12, status: "overtime", clockIn: "09:00", clockOut: "16:00", aiTip: "周末加班" },
+  { day: 14, status: "late", clockIn: "09:50", clockOut: "18:30", aiTip: "迟到50分钟", anomalyMinutes: 50 },
+  { day: 16, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
+  { day: 19, status: "overtime", clockIn: "09:00", clockOut: "15:00", aiTip: "周末加班" },
+  { day: 21, status: "late", clockIn: "09:25", clockOut: "18:00", aiTip: "迟到25分钟", anomalyMinutes: 25 },
+  { day: 24, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
+  { day: 27, status: "late", clockIn: "09:20", clockOut: "18:00", aiTip: "迟到20分钟", anomalyMinutes: 20 },
+  { day: 29, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
+];
+
+const sunQiSpecs: DaySpec[] = [
+  { day: 2, status: "late", clockIn: "09:20", clockOut: "18:00", aiTip: "迟到20分钟", anomalyMinutes: 20 },
+  { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
+  { day: 8, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
+  { day: 12, status: "overtime", clockIn: "09:00", clockOut: "16:00", aiTip: "周末加班" },
+  { day: 14, status: "late", clockIn: "09:30", clockOut: "18:00", aiTip: "迟到30分钟", anomalyMinutes: 30 },
+  { day: 17, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
+  { day: 22, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "迟到15分钟", anomalyMinutes: 15 },
+  { day: 25, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
+  { day: 28, status: "late", clockIn: "09:10", clockOut: "18:00", aiTip: "迟到10分钟", anomalyMinutes: 10 },
+];
+
+const zhouBaSpecs: DaySpec[] = [
+  { day: 3, status: "late", clockIn: "09:18", clockOut: "18:00", aiTip: "迟到18分钟", anomalyMinutes: 18 },
+  { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
+  { day: 9, status: "leave", clockIn: "—", clockOut: "—", aiTip: "年假一天", leaveType: "年假" },
+  { day: 14, status: "late", clockIn: "09:25", clockOut: "18:00", aiTip: "迟到25分钟", anomalyMinutes: 25 },
+  { day: 19, status: "overtime", clockIn: "09:00", clockOut: "15:00", aiTip: "周末加班" },
+  { day: 22, status: "late", clockIn: "09:12", clockOut: "18:00", aiTip: "迟到12分钟", anomalyMinutes: 12 },
+  { day: 26, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
+  { day: 29, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
+];
+
+const wuJiuSpecs: DaySpec[] = [
+  { day: 1, status: "late", clockIn: "09:22", clockOut: "18:00", aiTip: "迟到22分钟", anomalyMinutes: 22 },
+  { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
+  { day: 10, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
+  { day: 12, status: "overtime", clockIn: "09:00", clockOut: "16:00", aiTip: "周末加班" },
+  { day: 16, status: "late", clockIn: "09:35", clockOut: "18:00", aiTip: "迟到35分钟", anomalyMinutes: 35 },
+  { day: 20, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
+  { day: 24, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "迟到15分钟", anomalyMinutes: 15 },
+  { day: 28, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
+];
+
+function createEmployee(
+  id: string, name: string, campus: Campus, positionType: PositionType,
+  anomalyCount: number, avatarColor: string, dept: string,
+  employeeNo: string, supervisor: string, dingId: string, accessCardNo: string,
+  hireDate: string, specs: DaySpec[]
+): HeatmapEmployee {
+  const days = buildDays(specs);
+  const anomalies = buildAnomalies(days);
+  const timeline = buildTimeline(days);
+  const stats = buildStats(days, anomalyCount);
+  return {
+    id, name, campus, positionType, anomalyCount, avatarColor, days,
+    employeeNo, hireDate, supervisor, dingId, accessCardNo, dept,
+    stats, anomalies, timeline,
+  };
+}
+
+export const heatmapEmployees: HeatmapEmployee[] = [
+  createEmployee("H001", "张三", "鄂州工厂", "生产岗", 7, "bg-emerald-500", "生产部",
+    "EZ-2024001", "刘主管", "zhangsan_ez", "AC10001", "2024-03-15", zhangSanSpecs),
+  createEmployee("H002", "李四", "鄂州工厂", "质检岗", 5, "bg-amber-500", "质检部",
+    "EZ-2024002", "陈主管", "lisi_ez", "AC10002", "2024-05-20", liSiSpecs),
+  createEmployee("H003", "王五", "武汉总部", "销售岗", 5, "bg-violet-500", "销售部",
+    "WH-2023015", "周经理", "wangwu_wh", "AC20001", "2023-08-10", wangWuSpecs),
+  createEmployee("H004", "赵六", "武汉总部", "行政岗", 7, "bg-red-500", "行政部",
+    "WH-2023008", "马主任", "zhaoliu_wh", "AC20002", "2023-02-28", zhaoLiuSpecs),
+  createEmployee("H005", "孙七", "鄂州工厂", "生产岗", 5, "bg-orange-500", "生产部",
+    "EZ-2024005", "刘主管", "sunqi_ez", "AC10005", "2024-06-01", sunQiSpecs),
+  createEmployee("H006", "周八", "武汉总部", "研发岗", 4, "bg-blue-500", "研发部",
+    "WH-2022003", "李总监", "zhouba_wh", "AC20003", "2022-11-15", zhouBaSpecs),
+  createEmployee("H007", "吴九", "鄂州工厂", "生产岗", 4, "bg-orange-500", "生产部",
+    "EZ-2024007", "刘主管", "wujiu_ez", "AC10007", "2024-07-10", wuJiuSpecs),
+];
+
+// ========== 统计计数 (从 heatmapEmployees 派生) ==========
+
+export function getFilterCounts(employees: HeatmapEmployee[]) {
+  let total = 0, abnormal = 0, overtime = 0, leave = 0, dayoff = 0;
+  for (const emp of employees) {
+    for (const d of emp.days) {
+      total++;
+      if (d.status === "late") abnormal++;
+      if (d.status === "leave") { abnormal++; leave++; }
+      if (d.status === "overtime") overtime++;
+      if (d.status === "dayoff") dayoff++;
+    }
+  }
+  return { total, abnormal, overtime, leave, dayoff };
+}
+
+// ========== Mock 数据 (unchanged exports) ==========
 
 export const todayExceptions: ExceptionRow[] = [
   {
@@ -110,72 +439,19 @@ export const todayExceptions: ExceptionRow[] = [
   },
 ];
 
-// 30天异常趋势
 export const anomalyTrend = Array.from({ length: 30 }, (_, i) => ({
   day: i + 1,
   count: Math.max(0, Math.floor(Math.random() * 8) + (i % 7 === 5 || i % 7 === 6 ? 0 : 2)),
 }));
 
-// 厂区分布
 export const campusDistribution = [
   { name: "武汉总部", value: 42, color: "#6366F1" },
   { name: "鄂州工厂", value: 58, color: "#F59E0B" },
 ];
 
-// 规则引擎状态
 export const rulesSummary = [
   "调休申请校验", "晚班餐补自动计算", "生产岗加班费计算", "非生产岗加班费计算", "考勤异常扣款规则",
 ];
-
-// ========== 热力图员工数据 ==========
-
-function generateDays(anomalyCount: number): DayCell[] {
-  const statuses: DayStatus[] = ["normal", "late", "overtime", "leave", "dayoff", "weekend"];
-  const days: DayCell[] = [];
-  let anomaliesLeft = anomalyCount;
-
-  for (let d = 1; d <= 30; d++) {
-    const weekday = new Date(2026, 3, d).getDay(); // April 2026
-    if (weekday === 0 || weekday === 6) {
-      // Some weekends have overtime
-      if (Math.random() < 0.3) {
-        days.push({ day: d, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" });
-      } else {
-        days.push({ day: d, status: "weekend" });
-      }
-    } else if (anomaliesLeft > 0 && Math.random() < 0.25) {
-      const sub: DayStatus[] = ["late", "leave"];
-      const s = sub[Math.floor(Math.random() * sub.length)];
-      anomaliesLeft--;
-      days.push({
-        day: d, status: s,
-        clockIn: s === "late" ? "09:35" : "—",
-        clockOut: s === "leave" ? "—" : "18:00",
-        aiTip: s === "late" ? "迟到35分钟" : "事假一天",
-      });
-    } else if (Math.random() < 0.15) {
-      days.push({ day: d, status: "overtime", clockIn: "08:30", clockOut: "21:00", aiTip: "加班3小时" });
-    } else if (Math.random() < 0.08) {
-      days.push({ day: d, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" });
-    } else {
-      days.push({ day: d, status: "normal", clockIn: "08:55", clockOut: "18:05" });
-    }
-  }
-  // ensure exact anomaly count
-  return days;
-}
-
-export const heatmapEmployees: HeatmapEmployee[] = [
-  { id: "H001", name: "张三", campus: "鄂州工厂", positionType: "生产岗", anomalyCount: 7, avatarColor: "bg-emerald-500", days: generateDays(7) },
-  { id: "H002", name: "李四", campus: "鄂州工厂", positionType: "质检岗", anomalyCount: 5, avatarColor: "bg-amber-500", days: generateDays(5) },
-  { id: "H003", name: "王五", campus: "武汉总部", positionType: "销售岗", anomalyCount: 5, avatarColor: "bg-violet-500", days: generateDays(5) },
-  { id: "H004", name: "赵六", campus: "武汉总部", positionType: "行政岗", anomalyCount: 7, avatarColor: "bg-red-500", days: generateDays(7) },
-  { id: "H005", name: "孙七", campus: "鄂州工厂", positionType: "生产岗", anomalyCount: 5, avatarColor: "bg-orange-500", days: generateDays(5) },
-  { id: "H006", name: "周八", campus: "武汉总部", positionType: "研发岗", anomalyCount: 4, avatarColor: "bg-blue-500", days: generateDays(4) },
-  { id: "H007", name: "吴九", campus: "鄂州工厂", positionType: "生产岗", anomalyCount: 4, avatarColor: "bg-orange-500", days: generateDays(4) },
-];
-
-// ========== 加班明细 ==========
 
 export const overtimeRows: OvertimeRow[] = [
   { id: "OT01", name: "张三", dept: "生产部", position: "生产岗", group: "鄂州工厂", date: "2026-04-14", startTime: "18:00", endTime: "21:00", reason: "订单赶工", hours: 3, canDayoff: 3, subsidy: 54, remark: "含餐补¥15" },
@@ -186,8 +462,6 @@ export const overtimeRows: OvertimeRow[] = [
   { id: "OT06", name: "周八", dept: "研发部", position: "研发岗", group: "武汉总部", date: "2026-04-16", startTime: "18:00", endTime: "21:30", reason: "版本上线", hours: 3.5, canDayoff: 3.5, subsidy: 0, remark: "非生产岗1.5倍" },
 ];
 
-// ========== 调休明细 ==========
-
 export const dayoffRows: DayoffRow[] = [
   { id: "DO01", name: "张三", dept: "生产部", totalHours: 24, usedHours: 8, remainHours: 16, lastUsedDate: "2026-04-10" },
   { id: "DO02", name: "李四", dept: "质检部", totalHours: 16, usedHours: 8, remainHours: 8, lastUsedDate: "2026-04-08" },
@@ -197,8 +471,6 @@ export const dayoffRows: DayoffRow[] = [
   { id: "DO06", name: "周八", dept: "研发部", totalHours: 24, usedHours: 8, remainHours: 16, lastUsedDate: "2026-04-11" },
   { id: "DO07", name: "吴九", dept: "生产部", totalHours: 12, usedHours: 4, remainHours: 8, lastUsedDate: "2026-04-09" },
 ];
-
-// ========== 规则引擎 ==========
 
 export const attendanceRules: AttendanceRule[] = [
   {
