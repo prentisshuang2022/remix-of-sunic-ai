@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Sparkles, MoreHorizontal, ArrowUpRight, CheckCircle2, MessageSquare,
+  Sparkles, MoreHorizontal, ArrowUpRight, Send, MessageSquare,
   TrendingUp, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -37,23 +37,23 @@ const exceptionTypeStyle: Record<ExceptionType, string> = {
 };
 
 const statusLabel: Record<ExceptionStatus, string> = {
-  pending: "待处理", "waiting-employee": "待员工补充", approving: "待审批", done: "已处理",
+  pending: "未通知", notified: "已通知", "employee-done": "员工已处理", "notified-no-response": "已通知未处理",
 };
 const statusStyle: Record<ExceptionStatus, string> = {
   pending: "bg-muted text-foreground border-border",
-  "waiting-employee": "bg-amber-50 text-amber-700 border-amber-200",
-  approving: "bg-blue-50 text-blue-700 border-blue-200",
-  done: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  notified: "bg-violet-50 text-violet-700 border-violet-200",
+  "employee-done": "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "notified-no-response": "bg-orange-50 text-orange-700 border-orange-200",
 };
 
 export default function TodayOverview({ onSwitchTab }: { onSwitchTab: (tab: string) => void }) {
   const navigate = useNavigate();
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("pending");
-  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [doneIds] = useState<Set<string>>(new Set());
 
   const rows = useMemo(() => todayExceptions.map((r) =>
-    doneIds.has(r.id) ? { ...r, status: "done" as ExceptionStatus } : r,
+    doneIds.has(r.id) ? { ...r, status: "employee-done" as ExceptionStatus } : r,
   ), [doneIds]);
 
   const filtered = rows.filter((r) => {
@@ -62,9 +62,8 @@ export default function TodayOverview({ onSwitchTab }: { onSwitchTab: (tab: stri
     return true;
   });
 
-  const handleMarkDone = (id: string, name: string) => {
-    setDoneIds((prev) => new Set(prev).add(id));
-    toast.success(`${name} 的异常已标记为已处理`);
+  const handleNotify = (_id: string, name: string) => {
+    toast.success(`已通过钉钉发送通知给${name}`);
   };
 
   // KPI
@@ -106,7 +105,7 @@ export default function TodayOverview({ onSwitchTab }: { onSwitchTab: (tab: stri
             <div className="flex items-start justify-between">
               <div>
                 <CardTitle className="text-base">今日异常列表</CardTitle>
-                <CardDescription>需要处理的考勤异常记录</CardDescription>
+                <CardDescription>需要通知处理的考勤异常记录</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -188,8 +187,8 @@ export default function TodayOverview({ onSwitchTab }: { onSwitchTab: (tab: stri
                           <DropdownMenuItem onClick={() => navigate(`/attendance/exception/${row.id}`)}>
                             <ArrowUpRight className="mr-2 h-4 w-4" />查看详情
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleMarkDone(row.id, row.name)} disabled={row.status === "done"}>
-                            <CheckCircle2 className="mr-2 h-4 w-4" />标记已处理
+                          <DropdownMenuItem onClick={() => handleNotify(row.id, row.name)} disabled={row.status === "employee-done"}>
+                            <Send className="mr-2 h-4 w-4" />一键通知钉钉
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => toast(`已通过钉钉发起与 ${row.name} 的会话`)}>

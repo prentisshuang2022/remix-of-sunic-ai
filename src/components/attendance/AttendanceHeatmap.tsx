@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { heatmapEmployees, type Campus, type DayStatus, type HeatmapEmployee } from "@/mocks/attendance";
 import EmployeeDetailCard from "./EmployeeDetailCard";
+import LeaveBalanceDrawer from "./LeaveBalanceDrawer";
 
 const campusOptions: (Campus | "全部厂区")[] = ["全部厂区", "武汉总部", "鄂州工厂"];
 
@@ -96,6 +97,7 @@ export default function AttendanceHeatmap() {
   const [campus, setCampus] = useState<Campus | "全部厂区">("全部厂区");
   const [statusFilter, setStatusFilter] = useState<StatusFilterKey>("全部");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [leaveDrawerOpen, setLeaveDrawerOpen] = useState(false);
   const expandRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const counts = useMemo(() => computeCounts(heatmapEmployees), []);
@@ -253,7 +255,7 @@ export default function AttendanceHeatmap() {
               </Button>
             )}
             {statusFilter === "调休" && (
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary">
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary" onClick={() => setLeaveDrawerOpen(true)}>
                 管理调休余额 <ArrowRight className="h-3 w-3" />
               </Button>
             )}
@@ -292,6 +294,7 @@ export default function AttendanceHeatmap() {
                     employee={emp}
                     activeFilter={statusFilter}
                     onCollapse={() => toggleExpand(emp.id)}
+                    onOpenLeaveBalance={() => setLeaveDrawerOpen(true)}
                   />
                 </div>
               )}
@@ -304,6 +307,8 @@ export default function AttendanceHeatmap() {
           </div>
         )}
       </div>
+
+      <LeaveBalanceDrawer open={leaveDrawerOpen} onOpenChange={setLeaveDrawerOpen} />
     </div>
   );
 }
