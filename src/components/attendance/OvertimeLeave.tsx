@@ -46,10 +46,16 @@ export default function OvertimeLeave() {
             </button>
           ))}
         </div>
-        <Button variant="outline" size="sm" className="gap-1.5">
-          <Download className="h-4 w-4" />
-          导出 Excel
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" className="gap-1.5" onClick={() => setUploadOpen(true)}>
+            <Upload className="h-4 w-4" />
+            上传月度考勤表
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <Download className="h-4 w-4" />
+            导出 Excel
+          </Button>
+        </div>
       </div>
 
       {subTab === "overtime" ? (
