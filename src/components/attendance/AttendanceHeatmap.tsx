@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { heatmapEmployees, type Campus, type DayStatus, type HeatmapEmployee } from "@/mocks/attendance";
 import EmployeeDetailCard from "./EmployeeDetailCard";
+import LeaveBalanceDrawer from "./LeaveBalanceDrawer";
 
 const campusOptions: (Campus | "全部厂区")[] = ["全部厂区", "武汉总部", "鄂州工厂"];
 
@@ -96,6 +97,7 @@ export default function AttendanceHeatmap() {
   const [campus, setCampus] = useState<Campus | "全部厂区">("全部厂区");
   const [statusFilter, setStatusFilter] = useState<StatusFilterKey>("全部");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [leaveDrawerOpen, setLeaveDrawerOpen] = useState(false);
   const expandRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const counts = useMemo(() => computeCounts(heatmapEmployees), []);
