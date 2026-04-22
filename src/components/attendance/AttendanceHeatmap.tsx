@@ -92,7 +92,7 @@ function getSummary(filter: StatusFilterKey, employees: HeatmapEmployee[]) {
   }
 }
 
-export default function AttendanceHeatmap() {
+export default function AttendanceHeatmap({ onSwitchTab }: { onSwitchTab?: (tab: string) => void }) {
   const [search, setSearch] = useState("");
   const [campus, setCampus] = useState<Campus | "全部厂区">("全部厂区");
   const [statusFilter, setStatusFilter] = useState<StatusFilterKey>("全部");
@@ -250,7 +250,7 @@ export default function AttendanceHeatmap() {
           </div>
           <div className="flex items-center gap-2">
             {statusFilter === "加班" && (
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary">
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary" onClick={() => onSwitchTab?.("overtime")}>
                 查看加班明细 <ArrowRight className="h-3 w-3" />
               </Button>
             )}
