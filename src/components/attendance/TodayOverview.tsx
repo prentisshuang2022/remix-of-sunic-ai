@@ -50,10 +50,10 @@ export default function TodayOverview({ onSwitchTab }: { onSwitchTab: (tab: stri
   const navigate = useNavigate();
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("pending");
-  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [doneIds] = useState<Set<string>>(new Set());
 
   const rows = useMemo(() => todayExceptions.map((r) =>
-    doneIds.has(r.id) ? { ...r, status: "done" as ExceptionStatus } : r,
+    doneIds.has(r.id) ? { ...r, status: "employee-done" as ExceptionStatus } : r,
   ), [doneIds]);
 
   const filtered = rows.filter((r) => {
