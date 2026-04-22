@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { NewExamDialog } from "@/components/training/NewExamDialog";
 import { ImportMaterialsSheet } from "@/components/training/ImportMaterialsSheet";
-import { TrainingLayout } from "@/components/training/TrainingLayout";
+
 
 /* ───────── Mock Data ───────── */
 
