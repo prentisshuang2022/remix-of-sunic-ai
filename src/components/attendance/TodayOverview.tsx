@@ -37,13 +37,13 @@ const exceptionTypeStyle: Record<ExceptionType, string> = {
 };
 
 const statusLabel: Record<ExceptionStatus, string> = {
-  pending: "待处理", "waiting-employee": "待员工补充", approving: "待审批", done: "已处理",
+  pending: "未通知", notified: "已通知", "employee-done": "员工已处理", "notified-no-response": "已通知未处理",
 };
 const statusStyle: Record<ExceptionStatus, string> = {
   pending: "bg-muted text-foreground border-border",
-  "waiting-employee": "bg-amber-50 text-amber-700 border-amber-200",
-  approving: "bg-blue-50 text-blue-700 border-blue-200",
-  done: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  notified: "bg-violet-50 text-violet-700 border-violet-200",
+  "employee-done": "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "notified-no-response": "bg-orange-50 text-orange-700 border-orange-200",
 };
 
 export default function TodayOverview({ onSwitchTab }: { onSwitchTab: (tab: string) => void }) {

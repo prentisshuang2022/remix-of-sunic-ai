@@ -153,7 +153,7 @@ const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五
 // ========== Access record generators ==========
 
 function generateAccessRecords(day: number, clockIn?: string, clockOut?: string, status?: DayStatus, campus?: Campus): AccessRecord[] {
-  if (status === "weekend" && status !== "overtime") return [];
+  if (status === "weekend") return [];
   if (status === "leave" || status === "dayoff") return [];
   const gate = campus === "鄂州工厂" ? "正门" : "大楼正门";
   const cardNo = "#" + (1000 + Math.floor(Math.random() * 100));
