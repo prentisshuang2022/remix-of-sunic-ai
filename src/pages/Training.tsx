@@ -98,7 +98,7 @@ export default function Training() {
   const timeStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
   return (
-    <TrainingLayout>
+    <>
       <PageHeader
         title="培训助手 · 总览"
         description="脱岗培训 → 在岗培训 业务闭环一览"
@@ -338,7 +338,7 @@ export default function Training() {
 
       <NewExamDialog open={examOpen} onClose={() => setExamOpen(false)} />
       <ImportMaterialsSheet open={importOpen} onClose={() => setImportOpen(false)} />
-    </TrainingLayout>
+    </>
   );
 }
 
