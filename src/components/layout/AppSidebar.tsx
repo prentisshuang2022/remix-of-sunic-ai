@@ -5,8 +5,8 @@ import {
   Briefcase,
   LineChart,
   GraduationCap,
-  Repeat2,
-  ClipboardCheck,
+  Wallet,
+  BarChart3,
   MessageSquarePlus,
   History,
 } from "lucide-react";
@@ -23,23 +23,28 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
 const helpers = [
   { title: "工作台", url: "/", icon: LayoutDashboard },
-  { title: "员工档案助手", url: "/employees", icon: UserSquare2 },
+  { title: "员工管理", url: "/employees", icon: UserSquare2 },
   { title: "考勤助手", url: "/attendance", icon: CalendarClock },
-  { title: "招聘助手", url: "/recruiting", icon: Briefcase },
+  { title: "招聘管理", url: "/recruiting", icon: Briefcase },
   { title: "绩效助手", url: "/performance", icon: LineChart },
   { title: "培训助手", url: "/training", icon: GraduationCap },
+  { title: "薪酬福利", url: "/payroll", icon: Wallet },
+  { title: "数据报表", url: "/reports", icon: BarChart3 },
 ];
 
 const conversation = [
   { title: "新建对话", url: "/chat/new", icon: MessageSquarePlus },
   { title: "历史对话", url: "/chat/history", icon: History },
 ];
+
+const ruleColors = ["bg-teal-400", "bg-orange-400", "bg-violet-400", "bg-blue-400", "bg-red-400"];
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -101,6 +106,20 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      {!collapsed && (
+        <SidebarFooter className="border-t p-3">
+          <div className="rounded-lg bg-muted/60 p-3">
+            <p className="text-xs font-medium text-foreground">规则引擎</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">5条规则运行中</p>
+            <div className="flex gap-1.5 mt-2">
+              {ruleColors.map((c, i) => (
+                <div key={i} className={cn("h-2 w-2 rounded-full", c)} />
+              ))}
+            </div>
+          </div>
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }
