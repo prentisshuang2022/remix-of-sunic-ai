@@ -19,6 +19,10 @@ import {
   MapPin,
   ThumbsUp,
   ThumbsDown,
+  Settings2,
+  Check,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -27,6 +31,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -41,6 +47,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -265,12 +279,79 @@ const statusStyle: Record<string, string> = {
   "已 pass": "bg-danger-soft text-[hsl(var(--danger))]",
 };
 
+// [MOCK] 当前岗位画像数据 —— 重新匹配时可编辑
+const defaultProfileDims = [
+  { key: "skill", label: "技能匹配", weight: 35, threshold: 60, desc: "核心技术栈匹配度" },
+  { key: "exp", label: "工作经验", weight: 25, threshold: 50, desc: "相关领域工作年限" },
+  { key: "edu", label: "教育背景", weight: 15, threshold: 40, desc: "学历与院校" },
+  { key: "stable", label: "稳定性", weight: 15, threshold: 50, desc: "跳槽频率与在职时长" },
+  { key: "salary", label: "薪资契合", weight: 10, threshold: 30, desc: "期望薪资与预算匹配" },
+];
+
+const defaultHardReqs = [
+  { id: "h1", text: "3 年以上前端开发经验" },
+  { id: "h2", text: "熟练掌握 React + TypeScript" },
+  { id: "h3", text: "本科及以上学历" },
+];
+
+const defaultExcludes = [
+  { id: "e1", text: "近 1 年内跳槽超过 2 次" },
+  { id: "e2", text: "无 TypeScript 项目经验" },
+];
+
 export default function Candidates() {
   const [tab, setTab] = useState<"all" | "强匹配" | "可考虑" | "弱匹配">("all");
   const [keyword, setKeyword] = useState("");
   const [sortBy, setSortBy] = useState("score");
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [rematchOpen, setRematchOpen] = useState(false);
+
+  // 重新匹配时可编辑的岗位需求
+  const [rematchDims, setRematchDims] = useState(defaultProfileDims.map(d => ({ ...d })));
+  const [rematchHardReqs, setRematchHardReqs] = useState(defaultHardReqs.map(r => ({ ...r })));
+  const [rematchExcludes, setRematchExcludes] = useState(defaultExcludes.map(r => ({ ...r })));
+
+  const totalWeight = rematchDims.reduce((s, d) => s + d.weight, 0);
+
+  const handleOpenRematch = () => {
+    setRematchOpen(true);
+  };
+
+  const handleRematch = () => {
+    if (totalWeight !== 100) {
+      toast({ title: "权重之和必须为 100%", description: `当前为 ${totalWeight}%，请调整后重试`, variant: "destructive" });
+      return;
+    }
+    setRematchOpen(false);
+    toast({ title: "重新匹配已启动", description: "正在根据修改后的岗位需求重新计算匹配度…" });
+    // [BACKEND] POST /api/candidates/rematch { dims, hardReqs, excludes }
+  };
+
+  const updateDimWeight = (key: string, val: number) => {
+    setRematchDims(prev => prev.map(d => d.key === key ? { ...d, weight: val } : d));
+  };
+  const updateDimThreshold = (key: string, val: number) => {
+    setRematchDims(prev => prev.map(d => d.key === key ? { ...d, threshold: val } : d));
+  };
+  const updateHardReq = (id: string, text: string) => {
+    setRematchHardReqs(prev => prev.map(r => r.id === id ? { ...r, text } : r));
+  };
+  const removeHardReq = (id: string) => {
+    setRematchHardReqs(prev => prev.filter(r => r.id !== id));
+  };
+  const addHardReq = () => {
+    setRematchHardReqs(prev => [...prev, { id: `h-${Date.now()}`, text: "" }]);
+  };
+  const updateExclude = (id: string, text: string) => {
+    setRematchExcludes(prev => prev.map(r => r.id === id ? { ...r, text } : r));
+  };
+  const removeExclude = (id: string) => {
+    setRematchExcludes(prev => prev.filter(r => r.id !== id));
+  };
+  const addExclude = () => {
+    setRematchExcludes(prev => [...prev, { id: `e-${Date.now()}`, text: "" }]);
+  };
 
   const filtered = useMemo(() => {
     let list = candidates.filter((c) => {
@@ -307,8 +388,8 @@ export default function Candidates() {
         backLabel="返回招聘需求池"
         actions={
           <>
-            <Button variant="outline" size="sm">
-              <Sparkles className="h-4 w-4" />重新匹配
+            <Button variant="outline" size="sm" onClick={handleOpenRematch}>
+              <Settings2 className="h-4 w-4" />重新匹配
             </Button>
             <Button size="sm" disabled={selected.size === 0}>
               <Users className="h-4 w-4" />批量加入面试 {selected.size > 0 && `(${selected.size})`}
@@ -401,6 +482,125 @@ export default function Candidates() {
           {opened && <CandidateDetail c={opened} />}
         </SheetContent>
       </Sheet>
+
+      {/* 重新匹配 - 修改岗位需求 */}
+      <Dialog open={rematchOpen} onOpenChange={setRematchOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5" />修改岗位需求并重新匹配
+            </DialogTitle>
+            <DialogDescription>
+              调整匹配维度权重、阈值和筛选条件后，系统将重新计算所有候选人的匹配分数
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            {/* 评分维度 */}
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <Label className="text-sm font-semibold">匹配评分维度</Label>
+                <span className={cn("text-xs tabular-nums", totalWeight === 100 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--danger))]")}>
+                  权重合计：{totalWeight}%{totalWeight !== 100 && " ≠ 100%"}
+                </span>
+              </div>
+              <div className="space-y-4">
+                {rematchDims.map((d) => (
+                  <div key={d.key} className="rounded-lg border p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-medium">{d.label}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{d.desc}</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
+                          <span>权重</span>
+                          <span className="font-medium tabular-nums text-foreground">{d.weight}%</span>
+                        </div>
+                        <Slider
+                          min={0} max={100} step={5}
+                          value={[d.weight]}
+                          onValueChange={([v]) => updateDimWeight(d.key, v)}
+                        />
+                      </div>
+                      <div>
+                        <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
+                          <span>最低阈值</span>
+                          <span className="font-medium tabular-nums text-foreground">{d.threshold}分</span>
+                        </div>
+                        <Slider
+                          min={0} max={100} step={5}
+                          value={[d.threshold]}
+                          onValueChange={([v]) => updateDimThreshold(d.key, v)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* 硬性要求 */}
+            <section>
+              <div className="mb-2 flex items-center justify-between">
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  <Check className="h-3.5 w-3.5 text-[hsl(var(--success))]" />硬性要求
+                </Label>
+                <Button variant="ghost" size="sm" onClick={addHardReq} className="h-7 text-xs">+ 添加</Button>
+              </div>
+              <div className="space-y-2">
+                {rematchHardReqs.map((r) => (
+                  <div key={r.id} className="flex items-center gap-2">
+                    <Input
+                      value={r.text}
+                      onChange={(e) => updateHardReq(r.id, e.target.value)}
+                      placeholder="输入硬性要求…"
+                      className="h-8 text-sm"
+                    />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-[hsl(var(--danger))]" onClick={() => removeHardReq(r.id)}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* 排除项 */}
+            <section>
+              <div className="mb-2 flex items-center justify-between">
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 text-[hsl(var(--danger))]" />排除项
+                </Label>
+                <Button variant="ghost" size="sm" onClick={addExclude} className="h-7 text-xs">+ 添加</Button>
+              </div>
+              <div className="space-y-2">
+                {rematchExcludes.map((r) => (
+                  <div key={r.id} className="flex items-center gap-2">
+                    <Input
+                      value={r.text}
+                      onChange={(e) => updateExclude(r.id, e.target.value)}
+                      placeholder="输入排除条件…"
+                      className="h-8 text-sm"
+                    />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-[hsl(var(--danger))]" onClick={() => removeExclude(r.id)}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRematchOpen(false)}>取消</Button>
+            <Button onClick={handleRematch}>
+              <Sparkles className="h-4 w-4" />确认并重新匹配
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
