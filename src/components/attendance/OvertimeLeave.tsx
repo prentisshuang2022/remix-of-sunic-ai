@@ -13,12 +13,20 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { overtimeRows, dayoffRows } from "@/mocks/attendance";
+import OvertimeDetailDrawer, { overtimeDetails } from "./OvertimeDetailDrawer";
 
 export default function OvertimeLeave() {
   const [subTab, setSubTab] = useState<"overtime" | "dayoff">("overtime");
   const [campusFilter, setCampusFilter] = useState("all");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [posFilter, setPosFilter] = useState("all");
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState<string | null>(null);
+
+  const handleRowClick = (id: string) => {
+    setSelectedDetail(id);
+    setDetailOpen(true);
+  };
 
   const filteredOT = overtimeRows.filter((r) => {
     if (campusFilter !== "all" && r.group !== campusFilter) return false;
