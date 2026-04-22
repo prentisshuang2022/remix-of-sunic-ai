@@ -146,5 +146,8 @@ export default function OvertimeLeave() {
         </div>
       )}
     </div>
+
+      <UploadAttendanceModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+    </>
   );
 }
