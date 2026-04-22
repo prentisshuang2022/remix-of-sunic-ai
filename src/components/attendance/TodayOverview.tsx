@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Sparkles, MoreHorizontal, ArrowUpRight, CheckCircle2, MessageSquare,
+  Sparkles, MoreHorizontal, ArrowUpRight, Send, MessageSquare,
   TrendingUp, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
