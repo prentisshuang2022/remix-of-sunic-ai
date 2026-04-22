@@ -6,13 +6,13 @@
 // ========== 类型定义 ==========
 
 export type ExceptionType = "迟到" | "早退" | "缺卡" | "旷工";
-export type ExceptionStatus = "pending" | "waiting-employee" | "approving" | "done";
+export type ExceptionStatus = "pending" | "notified" | "employee-done" | "notified-no-response";
 export type Campus = "武汉总部" | "鄂州工厂";
 export type PositionType = "生产岗" | "质检岗" | "销售岗" | "行政岗" | "研发岗";
 
 export type DayStatus = "normal" | "late" | "overtime" | "leave" | "dayoff" | "weekend";
 export type LeaveType = "事假" | "病假" | "年假";
-export type AnomalyProcessStatus = "待处理" | "已核销" | "已扣款";
+export type AnomalyProcessStatus = "未通知" | "已通知" | "员工已处理" | "已通知未处理";
 
 export interface ExceptionRow {
   id: string;
@@ -27,6 +27,14 @@ export interface ExceptionRow {
   status: ExceptionStatus;
 }
 
+export interface AccessRecord {
+  time: string;
+  direction: "入厂" | "出厂" | "出门" | "入门";
+  gate: string;
+  method: "门禁卡" | "刷脸";
+  cardNo?: string;
+}
+
 export interface DayCell {
   day: number;
   weekday: number; // 0=Sun 6=Sat
@@ -39,6 +47,8 @@ export interface DayCell {
   aiTip?: string;
   leaveType?: LeaveType;
   anomalyMinutes?: number;
+  accessRecords?: AccessRecord[];
+  hasAccessEvidence?: boolean;
 }
 
 export interface AnomalyRecord {
@@ -47,8 +57,10 @@ export interface AnomalyRecord {
   type: string;
   description: string;
   processStatus: AnomalyProcessStatus;
+  notifiedAt?: string;
   aiSuggestion: string;
   evidence?: string;
+  accessRecordCount?: number;
 }
 
 export interface OvertimeTimelineEntry {
@@ -58,6 +70,7 @@ export interface OvertimeTimelineEntry {
   description: string;
   linkedDay?: number;
   canApply?: boolean;
+  hasAccessEvidence?: boolean;
 }
 
 export interface EmployeeStats {
@@ -77,7 +90,6 @@ export interface HeatmapEmployee {
   anomalyCount: number;
   avatarColor: string;
   days: DayCell[];
-  // Extended fields for detail card
   employeeNo: string;
   hireDate: string;
   supervisor: string;
@@ -127,7 +139,6 @@ export interface AttendanceRule {
 }
 
 // ========== Helper: April 2026 weekday lookup ==========
-// April 2026: 1=Wed, 2=Thu, ... 
 function aprilWeekday(day: number): number {
   return new Date(2026, 3, day).getDay();
 }
@@ -139,6 +150,42 @@ function isWeekend(day: number): boolean {
 
 const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
+// ========== Access record generators ==========
+
+function generateAccessRecords(day: number, clockIn?: string, clockOut?: string, status?: DayStatus, campus?: Campus): AccessRecord[] {
+  if (status === "weekend" && status !== "overtime") return [];
+  if (status === "leave" || status === "dayoff") return [];
+  const gate = campus === "鄂州工厂" ? "正门" : "大楼正门";
+  const cardNo = "#" + (1000 + Math.floor(Math.random() * 100));
+  const records: AccessRecord[] = [];
+
+  // Morning entry - often earlier than clock-in
+  if (clockIn && clockIn !== "—") {
+    const [h, m] = clockIn.split(":").map(Number);
+    const earlyMin = Math.floor(Math.random() * 45) + 5; // 5-50 min earlier
+    const entryH = h - Math.floor((m - earlyMin + 60) / 60 - 1);
+    const entryM = ((m - earlyMin) % 60 + 60) % 60;
+    const entryTime = `${String(Math.max(7, entryH)).padStart(2, "0")}:${String(entryM).padStart(2, "0")}`;
+    records.push({ time: entryTime, direction: "入厂", gate, method: "门禁卡", cardNo });
+  }
+
+  // Lunch
+  if (Math.random() > 0.4) {
+    records.push({ time: "12:05", direction: "出门", gate: "食堂", method: "刷脸" });
+    records.push({ time: "12:48", direction: "入厂", gate, method: "门禁卡", cardNo });
+  }
+
+  // Evening exit
+  if (clockOut && clockOut !== "—") {
+    const [h, m] = clockOut.split(":").map(Number);
+    const lateMin = Math.floor(Math.random() * 20) + 5;
+    const exitTime = `${String(h).padStart(2, "0")}:${String(Math.min(59, m + lateMin)).padStart(2, "0")}`;
+    records.push({ time: exitTime, direction: "出厂", gate, method: "门禁卡", cardNo });
+  }
+
+  return records;
+}
+
 // ========== Deterministic employee day data ==========
 
 interface DaySpec {
@@ -149,15 +196,18 @@ interface DaySpec {
   aiTip?: string;
   leaveType?: LeaveType;
   anomalyMinutes?: number;
+  accessOverride?: AccessRecord[];
 }
 
-function buildDays(specs: DaySpec[]): DayCell[] {
+function buildDays(specs: DaySpec[], campus: Campus): DayCell[] {
   const specMap = new Map(specs.map(s => [s.day, s]));
   const days: DayCell[] = [];
   for (let d = 1; d <= 30; d++) {
     const wd = aprilWeekday(d);
     const spec = specMap.get(d);
     if (spec) {
+      const accessRecords = spec.accessOverride || generateAccessRecords(d, spec.clockIn, spec.clockOut, spec.status, campus);
+      const hasAccessEvidence = spec.status === "late" && accessRecords.length > 0 && accessRecords[0]?.time < (spec.clockIn || "");
       days.push({
         day: d,
         weekday: wd,
@@ -175,19 +225,20 @@ function buildDays(specs: DaySpec[]): DayCell[] {
         aiTip: spec.aiTip,
         leaveType: spec.leaveType,
         anomalyMinutes: spec.anomalyMinutes,
+        accessRecords,
+        hasAccessEvidence,
       });
     } else if (isWeekend(d)) {
       days.push({ day: d, weekday: wd, status: "weekend" });
     } else {
+      const clockIn = "08:55";
+      const clockOut = "18:05";
+      const accessRecords = generateAccessRecords(d, clockIn, clockOut, "normal", campus);
       days.push({
-        day: d,
-        weekday: wd,
-        status: "normal",
-        scheduledIn: "09:00",
-        scheduledOut: "18:00",
-        clockIn: "08:55",
-        clockOut: "18:05",
-        workHours: 9.2,
+        day: d, weekday: wd, status: "normal",
+        scheduledIn: "09:00", scheduledOut: "18:00",
+        clockIn, clockOut, workHours: 9.2,
+        accessRecords,
       });
     }
   }
@@ -196,33 +247,41 @@ function buildDays(specs: DaySpec[]): DayCell[] {
 
 function buildAnomalies(days: DayCell[]): AnomalyRecord[] {
   const anomalies: AnomalyRecord[] = [];
-  const aiTips: Record<string, { suggestion: string; evidence?: string }> = {
-    late: { suggestion: "门禁有早于打卡的记录，建议申请补卡", evidence: "门禁记录显示提前到达" },
-    leave: { suggestion: "存在请假审批记录，建议核销" },
-    dayoff: { suggestion: "调休已关联加班记录" },
-  };
-  const statusMap: Record<number, AnomalyProcessStatus> = {};
+  const statuses: AnomalyProcessStatus[] = ["未通知", "已通知", "员工已处理", "已通知未处理"];
   let i = 0;
   for (const d of days) {
     if (d.status === "late" || d.status === "leave") {
-      const statuses: AnomalyProcessStatus[] = ["待处理", "已核销", "已扣款"];
-      const ps = statuses[i % 3];
-      statusMap[d.day] = ps;
+      const ps = statuses[i % 4];
       i++;
-      const type = d.status === "late" ? (d.anomalyMinutes ? `迟到 ${d.anomalyMinutes} 分钟` : "迟到") : 
+      const type = d.status === "late" ? (d.anomalyMinutes ? `迟到 ${d.anomalyMinutes} 分钟` : "迟到") :
         d.leaveType ? `${d.leaveType}` : "请假";
       const desc = d.status === "late"
         ? `上班打卡 ${d.clockIn}，迟到 ${d.anomalyMinutes || 0} 分钟`
         : `${d.leaveType || "事假"}一天`;
-      const tip = aiTips[d.status] || { suggestion: "建议联系员工确认" };
+
+      const accessFirst = d.accessRecords?.[0];
+      let aiSuggestion = "";
+      let evidence = "";
+      const accessCount = d.accessRecords?.length || 0;
+
+      if (d.status === "late" && d.hasAccessEvidence && accessFirst) {
+        aiSuggestion = `疑似漏打卡，门禁 ${accessFirst.time} 已有入厂记录，建议通知员工补卡`;
+        evidence = `门禁记录 ${accessFirst.time} 入厂`;
+      } else if (d.status === "late") {
+        aiSuggestion = "无关联门禁记录，建议通知员工说明情况";
+      } else if (d.status === "leave") {
+        aiSuggestion = "存在请假审批记录，等待钉钉数据回流确认";
+      }
+
       anomalies.push({
         day: d.day,
         weekdayLabel: weekdayLabels[d.weekday],
-        type,
-        description: desc,
+        type, description: desc,
         processStatus: ps,
-        aiSuggestion: tip.suggestion,
-        evidence: tip.evidence,
+        notifiedAt: ps === "已通知" ? "3小时前" : ps === "已通知未处理" ? "2天前" : undefined,
+        aiSuggestion,
+        evidence,
+        accessRecordCount: accessCount > 0 ? accessCount : undefined,
       });
     }
   }
@@ -237,23 +296,20 @@ function buildTimeline(days: DayCell[]): OvertimeTimelineEntry[] {
   for (const ot of overtimeDays) {
     const hours = ot.workHours || 4;
     const linked = dayoffDays.find(df => df.day > ot.day);
+    const hasGateEvidence = (ot.accessRecords?.length || 0) > 0;
     entries.push({
-      day: ot.day,
-      type: "overtime",
-      hours,
+      day: ot.day, type: "overtime", hours,
       description: isWeekend(ot.day) ? `周末加班 ${hours}h` : `工作日加班 ${hours}h`,
       linkedDay: linked?.day,
       canApply: !linked,
+      hasAccessEvidence: hasGateEvidence,
     });
   }
   for (const df of dayoffDays) {
     const linked = overtimeDays.find(ot => ot.day < df.day);
     entries.push({
-      day: df.day,
-      type: "dayoff",
-      hours: 4,
-      description: `使用调休 4h`,
-      linkedDay: linked?.day,
+      day: df.day, type: "dayoff", hours: 4,
+      description: `使用调休 4h`, linkedDay: linked?.day,
     });
   }
   return entries.sort((a, b) => a.day - b.day);
@@ -270,78 +326,144 @@ function buildStats(days: DayCell[], anomalyCount: number): EmployeeStats {
 // ========== 7 employees with deterministic data ==========
 
 const zhangSanSpecs: DaySpec[] = [
-  { day: 2, status: "late", clockIn: "09:35", clockOut: "18:30", aiTip: "迟到35分钟", anomalyMinutes: 35 },
-  { day: 4, status: "overtime", clockIn: "09:00", clockOut: "21:00", aiTip: "周末加班安排" },
+  { day: 2, status: "late", clockIn: "09:35", clockOut: "18:30", aiTip: "疑似漏打卡，门禁 08:58 已入厂", anomalyMinutes: 35,
+    accessOverride: [
+      { time: "08:58", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+      { time: "12:05", direction: "出门", gate: "食堂", method: "刷脸" },
+      { time: "12:48", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+      { time: "18:45", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+    ] },
+  { day: 4, status: "overtime", clockIn: "09:00", clockOut: "21:00", aiTip: "周末加班，门禁 08:50-21:30" },
   { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班4h" },
-  { day: 7, status: "late", clockIn: "09:20", clockOut: "18:00", aiTip: "迟到20分钟，门禁09:05", anomalyMinutes: 20 },
+  { day: 7, status: "late", clockIn: "09:20", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 09:05 入厂", anomalyMinutes: 20,
+    accessOverride: [
+      { time: "09:05", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+      { time: "18:25", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+    ] },
   { day: 10, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
-  { day: 14, status: "late", clockIn: "09:45", clockOut: "18:30", aiTip: "迟到45分钟", anomalyMinutes: 45 },
+  { day: 14, status: "late", clockIn: "09:45", clockOut: "18:30", aiTip: "迟到45分钟，无门禁早到记录", anomalyMinutes: 45 },
   { day: 17, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
-  { day: 19, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
-  { day: 21, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "迟到15分钟，门禁08:58", anomalyMinutes: 15 },
+  { day: 19, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班",
+    accessOverride: [
+      { time: "08:45", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+      { time: "19:30", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+    ] },
+  { day: 21, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 08:58 入厂", anomalyMinutes: 15,
+    accessOverride: [
+      { time: "08:58", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+      { time: "18:20", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+    ] },
   { day: 23, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休，关联4/5加班" },
   { day: 25, status: "late", clockIn: "09:30", clockOut: "18:00", aiTip: "迟到30分钟", anomalyMinutes: 30 },
   { day: 28, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
-  { day: 30, status: "late", clockIn: "09:10", clockOut: "18:00", aiTip: "迟到10分钟", anomalyMinutes: 10 },
+  { day: 30, status: "late", clockIn: "09:10", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 08:55 入厂", anomalyMinutes: 10,
+    accessOverride: [
+      { time: "08:55", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+      { time: "18:15", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1042" },
+    ] },
 ];
 
 const liSiSpecs: DaySpec[] = [
-  { day: 3, status: "late", clockIn: "09:25", clockOut: "18:00", aiTip: "迟到25分钟", anomalyMinutes: 25 },
+  { day: 3, status: "late", clockIn: "09:25", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 09:00 入厂", anomalyMinutes: 25,
+    accessOverride: [
+      { time: "09:00", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1055" },
+      { time: "18:10", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1055" },
+    ] },
   { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
   { day: 8, status: "leave", clockIn: "—", clockOut: "—", aiTip: "年假一天", leaveType: "年假" },
   { day: 12, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
-  { day: 15, status: "late", clockIn: "09:40", clockOut: "18:00", aiTip: "迟到40分钟", anomalyMinutes: 40 },
+  { day: 15, status: "late", clockIn: "09:40", clockOut: "18:00", aiTip: "迟到40分钟，无门禁早到记录", anomalyMinutes: 40 },
   { day: 18, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
-  { day: 22, status: "late", clockIn: "09:12", clockOut: "18:00", aiTip: "迟到12分钟", anomalyMinutes: 12 },
+  { day: 22, status: "late", clockIn: "09:12", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 08:50 入厂", anomalyMinutes: 12,
+    accessOverride: [
+      { time: "08:50", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1055" },
+      { time: "18:15", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1055" },
+    ] },
   { day: 24, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
   { day: 29, status: "late", clockIn: "09:18", clockOut: "18:00", aiTip: "迟到18分钟", anomalyMinutes: 18 },
 ];
 
 const wangWuSpecs: DaySpec[] = [
-  { day: 1, status: "late", clockIn: "09:30", clockOut: "18:00", aiTip: "迟到30分钟", anomalyMinutes: 30 },
+  { day: 1, status: "late", clockIn: "09:30", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 09:10 入门", anomalyMinutes: 30,
+    accessOverride: [
+      { time: "09:10", direction: "入门", gate: "大楼正门", method: "门禁卡", cardNo: "#2001" },
+      { time: "18:20", direction: "出厂", gate: "大楼正门", method: "门禁卡", cardNo: "#2001" },
+    ] },
   { day: 6, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
-  { day: 11, status: "overtime", clockIn: "08:30", clockOut: "21:00", aiTip: "加班3小时" },
+  { day: 11, status: "overtime", clockIn: "08:30", clockOut: "21:00", aiTip: "加班3小时",
+    accessOverride: [
+      { time: "08:20", direction: "入门", gate: "大楼正门", method: "门禁卡", cardNo: "#2001" },
+      { time: "22:05", direction: "出厂", gate: "大楼正门", method: "门禁卡", cardNo: "#2001" },
+    ] },
   { day: 12, status: "overtime", clockIn: "09:00", clockOut: "16:00", aiTip: "周末加班" },
-  { day: 14, status: "late", clockIn: "09:22", clockOut: "18:00", aiTip: "迟到22分钟，门禁09:10", anomalyMinutes: 22 },
+  { day: 14, status: "late", clockIn: "09:22", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 09:10 入门", anomalyMinutes: 22,
+    accessOverride: [
+      { time: "09:10", direction: "入门", gate: "大楼正门", method: "门禁卡", cardNo: "#2001" },
+      { time: "18:30", direction: "出厂", gate: "大楼正门", method: "门禁卡", cardNo: "#2001" },
+    ] },
   { day: 16, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
   { day: 20, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
-  { day: 23, status: "late", clockIn: "09:35", clockOut: "18:30", aiTip: "迟到35分钟", anomalyMinutes: 35 },
+  { day: 23, status: "late", clockIn: "09:35", clockOut: "18:30", aiTip: "迟到35分钟，无门禁早到记录", anomalyMinutes: 35 },
   { day: 28, status: "leave", clockIn: "—", clockOut: "—", aiTip: "年假一天", leaveType: "年假" },
 ];
 
 const zhaoLiuSpecs: DaySpec[] = [
-  { day: 1, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "迟到15分钟", anomalyMinutes: 15 },
+  { day: 1, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 08:55 入门", anomalyMinutes: 15,
+    accessOverride: [
+      { time: "08:55", direction: "入门", gate: "大楼正门", method: "门禁卡", cardNo: "#2010" },
+      { time: "18:10", direction: "出厂", gate: "大楼正门", method: "门禁卡", cardNo: "#2010" },
+    ] },
   { day: 3, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
   { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
-  { day: 7, status: "late", clockIn: "09:40", clockOut: "18:00", aiTip: "迟到40分钟", anomalyMinutes: 40 },
+  { day: 7, status: "late", clockIn: "09:40", clockOut: "18:00", aiTip: "迟到40分钟，无门禁早到记录", anomalyMinutes: 40 },
   { day: 9, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
   { day: 12, status: "overtime", clockIn: "09:00", clockOut: "16:00", aiTip: "周末加班" },
-  { day: 14, status: "late", clockIn: "09:50", clockOut: "18:30", aiTip: "迟到50分钟", anomalyMinutes: 50 },
+  { day: 14, status: "late", clockIn: "09:50", clockOut: "18:30", aiTip: "迟到50分钟，门禁无早到记录", anomalyMinutes: 50 },
   { day: 16, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
-  { day: 19, status: "overtime", clockIn: "09:00", clockOut: "15:00", aiTip: "周末加班" },
-  { day: 21, status: "late", clockIn: "09:25", clockOut: "18:00", aiTip: "迟到25分钟", anomalyMinutes: 25 },
+  { day: 19, status: "overtime", clockIn: "09:00", clockOut: "15:00", aiTip: "周末加班",
+    accessOverride: [
+      { time: "08:40", direction: "入门", gate: "大楼正门", method: "门禁卡", cardNo: "#2010" },
+      { time: "17:45", direction: "出厂", gate: "大楼正门", method: "门禁卡", cardNo: "#2010" },
+    ] },
+  { day: 21, status: "late", clockIn: "09:25", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 09:02 入门", anomalyMinutes: 25,
+    accessOverride: [
+      { time: "09:02", direction: "入门", gate: "大楼正门", method: "门禁卡", cardNo: "#2010" },
+      { time: "18:15", direction: "出厂", gate: "大楼正门", method: "门禁卡", cardNo: "#2010" },
+    ] },
   { day: 24, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
   { day: 27, status: "late", clockIn: "09:20", clockOut: "18:00", aiTip: "迟到20分钟", anomalyMinutes: 20 },
   { day: 29, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
 ];
 
 const sunQiSpecs: DaySpec[] = [
-  { day: 2, status: "late", clockIn: "09:20", clockOut: "18:00", aiTip: "迟到20分钟", anomalyMinutes: 20 },
+  { day: 2, status: "late", clockIn: "09:20", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 08:52 入厂", anomalyMinutes: 20,
+    accessOverride: [
+      { time: "08:52", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1080" },
+      { time: "18:20", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1080" },
+    ] },
   { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
   { day: 8, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
   { day: 12, status: "overtime", clockIn: "09:00", clockOut: "16:00", aiTip: "周末加班" },
-  { day: 14, status: "late", clockIn: "09:30", clockOut: "18:00", aiTip: "迟到30分钟", anomalyMinutes: 30 },
+  { day: 14, status: "late", clockIn: "09:30", clockOut: "18:00", aiTip: "迟到30分钟，无门禁早到记录", anomalyMinutes: 30 },
   { day: 17, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
-  { day: 22, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "迟到15分钟", anomalyMinutes: 15 },
+  { day: 22, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 08:48 入厂", anomalyMinutes: 15,
+    accessOverride: [
+      { time: "08:48", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1080" },
+      { time: "18:25", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1080" },
+    ] },
   { day: 25, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
   { day: 28, status: "late", clockIn: "09:10", clockOut: "18:00", aiTip: "迟到10分钟", anomalyMinutes: 10 },
 ];
 
 const zhouBaSpecs: DaySpec[] = [
-  { day: 3, status: "late", clockIn: "09:18", clockOut: "18:00", aiTip: "迟到18分钟", anomalyMinutes: 18 },
+  { day: 3, status: "late", clockIn: "09:18", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 08:55 入门", anomalyMinutes: 18,
+    accessOverride: [
+      { time: "08:55", direction: "入门", gate: "大楼正门", method: "门禁卡", cardNo: "#2030" },
+      { time: "18:20", direction: "出厂", gate: "大楼正门", method: "门禁卡", cardNo: "#2030" },
+    ] },
   { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
   { day: 9, status: "leave", clockIn: "—", clockOut: "—", aiTip: "年假一天", leaveType: "年假" },
-  { day: 14, status: "late", clockIn: "09:25", clockOut: "18:00", aiTip: "迟到25分钟", anomalyMinutes: 25 },
+  { day: 14, status: "late", clockIn: "09:25", clockOut: "18:00", aiTip: "迟到25分钟，无门禁早到记录", anomalyMinutes: 25 },
   { day: 19, status: "overtime", clockIn: "09:00", clockOut: "15:00", aiTip: "周末加班" },
   { day: 22, status: "late", clockIn: "09:12", clockOut: "18:00", aiTip: "迟到12分钟", anomalyMinutes: 12 },
   { day: 26, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
@@ -349,13 +471,21 @@ const zhouBaSpecs: DaySpec[] = [
 ];
 
 const wuJiuSpecs: DaySpec[] = [
-  { day: 1, status: "late", clockIn: "09:22", clockOut: "18:00", aiTip: "迟到22分钟", anomalyMinutes: 22 },
+  { day: 1, status: "late", clockIn: "09:22", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 08:50 入厂", anomalyMinutes: 22,
+    accessOverride: [
+      { time: "08:50", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1095" },
+      { time: "18:15", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1095" },
+    ] },
   { day: 5, status: "overtime", clockIn: "09:00", clockOut: "17:00", aiTip: "周末加班" },
   { day: 10, status: "leave", clockIn: "—", clockOut: "—", aiTip: "事假一天", leaveType: "事假" },
   { day: 12, status: "overtime", clockIn: "09:00", clockOut: "16:00", aiTip: "周末加班" },
   { day: 16, status: "late", clockIn: "09:35", clockOut: "18:00", aiTip: "迟到35分钟", anomalyMinutes: 35 },
   { day: 20, status: "dayoff", clockIn: "—", clockOut: "—", aiTip: "调休" },
-  { day: 24, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "迟到15分钟", anomalyMinutes: 15 },
+  { day: 24, status: "late", clockIn: "09:15", clockOut: "18:00", aiTip: "疑似漏打卡，门禁 08:52 入厂", anomalyMinutes: 15,
+    accessOverride: [
+      { time: "08:52", direction: "入厂", gate: "正门", method: "门禁卡", cardNo: "#1095" },
+      { time: "18:25", direction: "出厂", gate: "正门", method: "门禁卡", cardNo: "#1095" },
+    ] },
   { day: 28, status: "leave", clockIn: "—", clockOut: "—", aiTip: "病假一天", leaveType: "病假" },
 ];
 
@@ -365,7 +495,7 @@ function createEmployee(
   employeeNo: string, supervisor: string, dingId: string, accessCardNo: string,
   hireDate: string, specs: DaySpec[]
 ): HeatmapEmployee {
-  const days = buildDays(specs);
+  const days = buildDays(specs, campus);
   const anomalies = buildAnomalies(days);
   const timeline = buildTimeline(days);
   const stats = buildStats(days, anomalyCount);
@@ -393,7 +523,7 @@ export const heatmapEmployees: HeatmapEmployee[] = [
     "EZ-2024007", "刘主管", "wujiu_ez", "AC10007", "2024-07-10", wuJiuSpecs),
 ];
 
-// ========== 统计计数 (从 heatmapEmployees 派生) ==========
+// ========== 统计计数 ==========
 
 export function getFilterCounts(employees: HeatmapEmployee[]) {
   let total = 0, abnormal = 0, overtime = 0, leave = 0, dayoff = 0;
@@ -415,27 +545,27 @@ export const todayExceptions: ExceptionRow[] = [
   {
     id: "E001", name: "李明", dept: "研发部", position: "高级工程师",
     group: "总部考勤组", clockIn: "09:35", clockOut: "18:30",
-    type: "迟到", aiSuggestion: "无请假记录，建议发起补卡申请", status: "pending",
+    type: "迟到", aiSuggestion: "疑似漏打卡，门禁 08:58 有入门记录，建议通知员工补卡", status: "pending",
   },
   {
     id: "E002", name: "王芳", dept: "市场部", position: "市场经理",
     group: "总部考勤组", clockIn: "09:00", clockOut: "—",
-    type: "缺卡", aiSuggestion: "存在请假审批，建议核销", status: "pending",
+    type: "缺卡", aiSuggestion: "存在请假审批记录，等待钉钉数据回流确认", status: "pending",
   },
   {
     id: "E003", name: "钱七", dept: "运营部", position: "运营专员",
     group: "总部考勤组", clockIn: "09:10", clockOut: "18:00",
-    type: "迟到", aiSuggestion: "疑似漏打卡，有门禁记录 08:58", status: "pending",
+    type: "迟到", aiSuggestion: "疑似漏打卡，门禁 08:58 有入门记录，建议通知员工补卡", status: "pending",
   },
   {
     id: "E004", name: "张伟", dept: "销售部", position: "销售总监",
     group: "外勤考勤组", clockIn: "—", clockOut: "—",
-    type: "旷工", aiSuggestion: "无任何审批记录，建议联系确认", status: "waiting-employee",
+    type: "旷工", aiSuggestion: "无打卡记录且无门禁记录，建议通知员工说明情况", status: "notified",
   },
   {
     id: "E005", name: "赵六", dept: "产品部", position: "产品经理",
     group: "总部考勤组", clockIn: "08:55", clockOut: "17:30",
-    type: "早退", aiSuggestion: "存在加班调休记录，建议核销", status: "approving",
+    type: "早退", aiSuggestion: "门禁 17:35 出门，存在调休记录，等待钉钉回流", status: "notified",
   },
 ];
 
