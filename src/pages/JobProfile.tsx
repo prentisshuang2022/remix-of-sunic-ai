@@ -38,6 +38,7 @@ interface Dimension {
   key: string;
   label: string;
   weight: number;
+  threshold: number;
   desc: string;
 }
 
@@ -79,18 +80,37 @@ export default function JobProfile() {
   ]);
 
   const [dims, setDims] = useState<Dimension[]>([
-    { key: "skill", label: "技能匹配", weight: 35, desc: "技术栈与岗位要求的吻合度" },
-    { key: "exp", label: "工作经验", weight: 25, desc: "年限与项目背景" },
-    { key: "edu", label: "教育背景", weight: 15, desc: "学历与院校层次" },
-    { key: "stable", label: "稳定性", weight: 15, desc: "平均在职时长" },
-    { key: "salary", label: "薪资契合", weight: 10, desc: "期望薪资落在岗位区间内" },
+    { key: "skill", label: "技能匹配", weight: 35, threshold: 60, desc: "技术栈与岗位要求的吻合度" },
+    { key: "exp", label: "工作经验", weight: 25, threshold: 50, desc: "年限与项目背景" },
+    { key: "edu", label: "教育背景", weight: 15, threshold: 40, desc: "学历与院校层次" },
+    { key: "stable", label: "稳定性", weight: 15, threshold: 50, desc: "平均在职时长" },
+    { key: "salary", label: "薪资契合", weight: 10, threshold: 30, desc: "期望薪资落在岗位区间内" },
   ]);
 
   const totalWeight = dims.reduce((s, d) => s + d.weight, 0);
 
+  // [FRONTEND-ONLY] AI 重新生成 — 保留用户调整的 weight/threshold
   const handleGenerate = () => {
+    const existingDimMap = new Map(dims.map((d) => [d.key, d]));
+    const aiDims: Dimension[] = [
+      { key: "skill", label: "技能匹配", weight: 35, threshold: 60, desc: "技术栈与岗位要求的吻合度" },
+      { key: "exp", label: "工作经验", weight: 25, threshold: 50, desc: "年限与项目背景" },
+      { key: "edu", label: "教育背景", weight: 15, threshold: 40, desc: "学历与院校层次" },
+      { key: "stable", label: "稳定性", weight: 15, threshold: 50, desc: "平均在职时长" },
+      { key: "salary", label: "薪资契合", weight: 10, threshold: 30, desc: "期望薪资落在岗位区间内" },
+    ];
+
+    const newDims = aiDims.map((aiDim) => {
+      const existing = existingDimMap.get(aiDim.key);
+      if (existing) {
+        return { ...aiDim, weight: existing.weight, threshold: existing.threshold };
+      }
+      return aiDim;
+    });
+
+    setDims(newDims);
     setGenerated(true);
-    toast({ title: "AI 已生成岗位画像", description: "可基于业务实际进一步调整权重" });
+    toast({ title: "AI 已重新生成岗位画像", description: "已保留您调整过的权重与阈值" });
   };
 
   const addItem = (
@@ -113,7 +133,7 @@ export default function JobProfile() {
     <div className="flex flex-col">
       <PageHeader
         title="岗位画像"
-        description="AI 基于岗位 JD 生成结构化筛选规则，可调整权重并触发智能匹配"
+        description="AI 基于岗位 JD 生成结构化筛选规则，可调整权重与阈值并触发智能匹配"
         backTo="/recruiting"
         backLabel="返回招聘需求池"
         actions={
@@ -226,30 +246,21 @@ export default function JobProfile() {
               {/* 三组规则 */}
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <RuleGroup
-                  title="硬性要求"
-                  hint="必须满足"
-                  tone="success"
-                  icon={Check}
+                  title="硬性要求" hint="必须满足" tone="success" icon={Check}
                   items={hardReqs}
                   onAdd={() => addItem(setHardReqs, "h")}
                   onChange={(id, t) => updateItem(setHardReqs, id, t)}
                   onRemove={(id) => removeItem(setHardReqs, id)}
                 />
                 <RuleGroup
-                  title="加分项"
-                  hint="提升评分"
-                  tone="info"
-                  icon={Plus}
+                  title="加分项" hint="提升评分" tone="info" icon={Plus}
                   items={bonus}
                   onAdd={() => addItem(setBonus, "b")}
                   onChange={(id, t) => updateItem(setBonus, id, t)}
                   onRemove={(id) => removeItem(setBonus, id)}
                 />
                 <RuleGroup
-                  title="排除项"
-                  hint="自动过滤"
-                  tone="danger"
-                  icon={X}
+                  title="排除项" hint="自动过滤" tone="danger" icon={X}
                   items={excludes}
                   onAdd={() => addItem(setExcludes, "e")}
                   onChange={(id, t) => updateItem(setExcludes, id, t)}
@@ -257,13 +268,13 @@ export default function JobProfile() {
                 />
               </div>
 
-              {/* 评分维度权重 */}
+              {/* 评分维度权重 + 阈值 */}
               <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div>
                     <div className="text-sm font-medium">匹配评分维度</div>
                     <div className="text-xs text-muted-foreground">
-                      调整权重以影响候选人最终得分，总和应为 100
+                      调整权重影响最终得分排序，阈值为该维度最低合格线
                     </div>
                   </div>
                   <Badge
@@ -289,21 +300,37 @@ export default function JobProfile() {
                             <div className="text-xs text-muted-foreground">{d.desc}</div>
                           </div>
                         </div>
-                        <div className="text-base font-semibold tabular-nums text-primary">
-                          {d.weight}%
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">权重</span>
+                            <span className="font-semibold tabular-nums text-primary">{d.weight}%</span>
+                          </div>
+                          <Slider
+                            value={[d.weight]}
+                            max={100}
+                            step={5}
+                            onValueChange={([v]) =>
+                              setDims((arr) => arr.map((x, i) => (i === idx ? { ...x, weight: v } : x)))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">合格阈值</span>
+                            <span className="font-semibold tabular-nums text-[hsl(var(--warning-foreground))]">{d.threshold}分</span>
+                          </div>
+                          <Slider
+                            value={[d.threshold]}
+                            max={100}
+                            step={5}
+                            onValueChange={([v]) =>
+                              setDims((arr) => arr.map((x, i) => (i === idx ? { ...x, threshold: v } : x)))
+                            }
+                          />
                         </div>
                       </div>
-                      <Slider
-                        value={[d.weight]}
-                        max={100}
-                        step={5}
-                        className="mt-3"
-                        onValueChange={([v]) =>
-                          setDims((arr) =>
-                            arr.map((x, i) => (i === idx ? { ...x, weight: v } : x)),
-                          )
-                        }
-                      />
                     </div>
                   ))}
                 </div>
