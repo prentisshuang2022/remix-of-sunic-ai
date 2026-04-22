@@ -853,11 +853,6 @@ function JobCard({ job }: { job: Job }) {
           {job.createdAt} · {job.owner}
         </span>
         <div className="flex gap-1.5">
-          <Button size="sm" variant="ghost" asChild>
-            <Link to={`/recruiting/job/${job.id}`}>
-              {job.hasProfile ? "查看画像" : "生成画像"}
-            </Link>
-          </Button>
           <Button size="sm" variant={job.matchedCount > 0 ? "default" : "outline"} asChild>
             <Link to={`/recruiting/job/${job.id}/candidates`}>候选人</Link>
           </Button>
