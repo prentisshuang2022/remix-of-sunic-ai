@@ -13,12 +13,20 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { overtimeRows, dayoffRows } from "@/mocks/attendance";
+import OvertimeDetailDrawer, { overtimeDetails } from "./OvertimeDetailDrawer";
 
 export default function OvertimeLeave() {
   const [subTab, setSubTab] = useState<"overtime" | "dayoff">("overtime");
   const [campusFilter, setCampusFilter] = useState("all");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [posFilter, setPosFilter] = useState("all");
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState<string | null>(null);
+
+  const handleRowClick = (id: string) => {
+    setSelectedDetail(id);
+    setDetailOpen(true);
+  };
 
   const filteredOT = overtimeRows.filter((r) => {
     if (campusFilter !== "all" && r.group !== campusFilter) return false;
@@ -96,11 +104,16 @@ export default function OvertimeLeave() {
                   <TableHead>可调休(h)</TableHead>
                   <TableHead>补贴(¥)</TableHead>
                   <TableHead>备注</TableHead>
+                  <TableHead>操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredOT.map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer hover:bg-[#F9FAFB] transition-colors"
+                    onClick={() => handleRowClick(r.id)}
+                  >
                     <TableCell className="pl-6 font-medium text-sm">{r.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{r.dept}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{r.position}</TableCell>
@@ -112,6 +125,14 @@ export default function OvertimeLeave() {
                     <TableCell className="text-sm">{r.canDayoff}</TableCell>
                     <TableCell className="text-sm">{r.subsidy > 0 ? `¥${r.subsidy}` : "—"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.remark}</TableCell>
+                    <TableCell>
+                      <button
+                        className="text-xs text-[#3B5BDB] hover:underline"
+                        onClick={(e) => { e.stopPropagation(); handleRowClick(r.id); }}
+                      >
+                        查看详情
+                      </button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -149,6 +170,11 @@ export default function OvertimeLeave() {
     </div>
 
       <UploadAttendanceModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+      <OvertimeDetailDrawer
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        detail={selectedDetail ? overtimeDetails[selectedDetail] ?? null : null}
+      />
     </>
   );
 }
