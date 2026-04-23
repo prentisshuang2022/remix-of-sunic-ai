@@ -53,6 +53,19 @@ const mockExtractQuestions = (fileName: string): PreviewQuestion[] => {
   return base;
 };
 
+interface NewQuestion {
+  type: "single" | "judge";
+  text: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  answer: string;
+  topic: string;
+}
+
+const emptyNewQ: NewQuestion = { type: "single", text: "", optionA: "", optionB: "", optionC: "", optionD: "", answer: "", topic: "" };
+
 export default function MaterialBank() {
   const [tab, setTab] = useState<"courseware" | "questions">("courseware");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -62,6 +75,24 @@ export default function MaterialBank() {
   const [extractedQs, setExtractedQs] = useState<PreviewQuestion[]>([]);
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // [FRONTEND-ONLY] New question dialog state
+  const [addQOpen, setAddQOpen] = useState(false);
+  const [newQ, setNewQ] = useState<NewQuestion>({ ...emptyNewQ });
+
+  const handleAddQ = () => {
+    if (!newQ.text.trim() || !newQ.answer) {
+      toast.error("请填写题干和正确答案");
+      return;
+    }
+    if (newQ.type === "single" && (!newQ.optionA || !newQ.optionB)) {
+      toast.error("单选题至少填写 A、B 两个选项");
+      return;
+    }
+    setAddQOpen(false);
+    setNewQ({ ...emptyNewQ });
+    toast.success("题目已添加到题库");
+  };
 
   const resetDialog = () => {
     setUploadStep("select");
@@ -141,8 +172,9 @@ export default function MaterialBank() {
           <Button size="sm" variant={tab === "courseware" ? "default" : "outline"} className={tab === "courseware" ? "bg-[#1E6FFF] hover:bg-[#1E6FFF]/90 rounded-lg" : "rounded-lg"} onClick={() => setTab("courseware")}>课件</Button>
           <Button size="sm" variant={tab === "questions" ? "default" : "outline"} className={tab === "questions" ? "bg-[#1E6FFF] hover:bg-[#1E6FFF]/90 rounded-lg" : "rounded-lg"} onClick={() => setTab("questions")}>题库</Button>
         </div>
-        <Button variant="outline" className="rounded-xl" onClick={openDialog}>
-          <Upload className="h-4 w-4 mr-1" />{tab === "courseware" ? "上传素材" : "新增题目"}
+        <Button variant="outline" className="rounded-xl" onClick={() => tab === "courseware" ? openDialog() : setAddQOpen(true)}>
+          {tab === "courseware" ? <Upload className="h-4 w-4 mr-1" /> : <CheckCircle className="h-4 w-4 mr-1" />}
+          {tab === "courseware" ? "上传素材" : "新增题目"}
         </Button>
       </div>
 
@@ -353,6 +385,68 @@ export default function MaterialBank() {
               <p className="text-sm text-muted-foreground">已自动入库并生成题目</p>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Question Dialog */}
+      <Dialog open={addQOpen} onOpenChange={v => { if (!v) { setNewQ({ ...emptyNewQ }); setAddQOpen(false); } }}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>新增题目</DialogTitle>
+            <DialogDescription>手动录入单选题或判断题，保存后直接加入题库</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {/* Type selector */}
+            <div className="flex gap-2">
+              <Button size="sm" variant={newQ.type === "single" ? "default" : "outline"} className="rounded-lg" onClick={() => setNewQ(p => ({ ...p, type: "single", answer: "" }))}>单选题</Button>
+              <Button size="sm" variant={newQ.type === "judge" ? "default" : "outline"} className="rounded-lg" onClick={() => setNewQ(p => ({ ...p, type: "judge", optionA: "正确", optionB: "错误", optionC: "", optionD: "", answer: "" }))}>判断题</Button>
+            </div>
+
+            {/* Stem */}
+            <div>
+              <Label className="text-xs">题干 *</Label>
+              <Input className="mt-1" placeholder="请输入题目内容" value={newQ.text} onChange={e => setNewQ(p => ({ ...p, text: e.target.value }))} />
+            </div>
+
+            {/* Options */}
+            {newQ.type === "single" ? (
+              <div className="grid grid-cols-2 gap-2">
+                {(["A", "B", "C", "D"] as const).map(letter => {
+                  const key = `option${letter}` as keyof NewQuestion;
+                  return (
+                    <div key={letter}>
+                      <Label className="text-xs">选项 {letter} {letter <= "B" && "*"}</Label>
+                      <Input className="mt-1" placeholder={`选项 ${letter}`} value={newQ[key] as string} onChange={e => setNewQ(p => ({ ...p, [key]: e.target.value }))} />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex gap-4 text-sm text-muted-foreground">
+                <span>A. 正确</span><span>B. 错误</span>
+              </div>
+            )}
+
+            {/* Answer */}
+            <div>
+              <Label className="text-xs">正确答案 *</Label>
+              <div className="flex gap-2 mt-1">
+                {(newQ.type === "single" ? ["A", "B", "C", "D"] : ["A", "B"]).map(v => (
+                  <Button key={v} size="sm" variant={newQ.answer === v ? "default" : "outline"} className="rounded-lg w-10" onClick={() => setNewQ(p => ({ ...p, answer: v }))}>{v}</Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Topic */}
+            <div>
+              <Label className="text-xs">知识点（可选）</Label>
+              <Input className="mt-1" placeholder="例如：焊接安全" value={newQ.topic} onChange={e => setNewQ(p => ({ ...p, topic: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-lg" onClick={() => { setNewQ({ ...emptyNewQ }); setAddQOpen(false); }}>取消</Button>
+            <Button className="rounded-lg" onClick={handleAddQ}>确认添加</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
