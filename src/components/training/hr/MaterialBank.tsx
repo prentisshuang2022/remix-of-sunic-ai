@@ -172,8 +172,9 @@ export default function MaterialBank() {
           <Button size="sm" variant={tab === "courseware" ? "default" : "outline"} className={tab === "courseware" ? "bg-[#1E6FFF] hover:bg-[#1E6FFF]/90 rounded-lg" : "rounded-lg"} onClick={() => setTab("courseware")}>课件</Button>
           <Button size="sm" variant={tab === "questions" ? "default" : "outline"} className={tab === "questions" ? "bg-[#1E6FFF] hover:bg-[#1E6FFF]/90 rounded-lg" : "rounded-lg"} onClick={() => setTab("questions")}>题库</Button>
         </div>
-        <Button variant="outline" className="rounded-xl" onClick={openDialog}>
-          <Upload className="h-4 w-4 mr-1" />{tab === "courseware" ? "上传素材" : "新增题目"}
+        <Button variant="outline" className="rounded-xl" onClick={() => tab === "courseware" ? openDialog() : setAddQOpen(true)}>
+          {tab === "courseware" ? <Upload className="h-4 w-4 mr-1" /> : <CheckCircle className="h-4 w-4 mr-1" />}
+          {tab === "courseware" ? "上传素材" : "新增题目"}
         </Button>
       </div>
 
