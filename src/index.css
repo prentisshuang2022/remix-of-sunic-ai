@@ -68,6 +68,11 @@
     --train-onsite-foreground: 0 0% 100%;
     --train-onsite-soft: 160 70% 94%;
 
+    /* 三工蓝 — 培训助手主色 */
+    --sg-blue: 216 100% 56%;
+    --sg-blue-foreground: 0 0% 100%;
+    --sg-blue-soft: 216 100% 96%;
+
     /* 侧边栏 */
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 222 25% 25%;
