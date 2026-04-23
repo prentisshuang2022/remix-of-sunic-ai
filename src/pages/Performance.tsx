@@ -222,37 +222,35 @@ const indicatorRows = [
   { code: "PR-007", name: "设施报修响应时长", family: "物业", unit: "h", target: "≤ 2", source: "OA 系统", aiTag: "—" },
 ];
 
-/* ================== 过程数据 - 9 个业务系统 ================== */
-interface BizSystem {
+/* ================== 过程数据 - 真实数据源 ================== */
+interface DataSource {
   name: string;
   key: string;
   connected: boolean;
+  planned?: boolean;
+  modules: string[];
   indicators: number;
+  todaySync: number;
   lastSync: string;
+  description: string;
 }
-const bizSystems: BizSystem[] = [
-  { name: "MES 制造执行", key: "MES", connected: true, indicators: 14, lastSync: "2 分钟前" },
-  { name: "ERP 企业资源", key: "ERP", connected: true, indicators: 9, lastSync: "5 分钟前" },
-  { name: "QMS 质量管理", key: "QMS", connected: true, indicators: 6, lastSync: "8 分钟前" },
-  { name: "CRM 客户系统", key: "CRM", connected: false, indicators: 7, lastSync: "—" },
-  { name: "PLM 产品生命周期", key: "PLM", connected: false, indicators: 11, lastSync: "—" },
-  { name: "EHS 安全环境", key: "EHS", connected: false, indicators: 4, lastSync: "—" },
-  { name: "OA 协同办公", key: "OA", connected: true, indicators: 5, lastSync: "12 分钟前" },
-  { name: "钉钉", key: "DT", connected: true, indicators: 3, lastSync: "1 分钟前" },
-  { name: "企微", key: "WX", connected: true, indicators: 2, lastSync: "3 分钟前" },
+const dataSources: DataSource[] = [
+  { name: "钉钉", key: "DT", connected: true, modules: ["考勤", "审批", "组织", "员工"], indicators: 8, todaySync: 240, lastSync: "3 分钟前", description: "通过钉钉开放平台对接，自动同步考勤打卡、请假审批、组织架构和员工花名册数据" },
+  { name: "ERP", key: "ERP", connected: true, modules: ["销售", "财务", "采购", "库存"], indicators: 12, todaySync: 117, lastSync: "8 分钟前", description: "对接金蝶/用友 ERP 系统，自动抓取销售订单、财务核算、采购执行和库存周转数据" },
+  { name: "CRM", key: "CRM", connected: false, planned: true, modules: ["销售漏斗", "客户", "商机"], indicators: 6, todaySync: 0, lastSync: "—", description: "规划对接 CRM 系统，将覆盖销售漏斗转化率、客户拜访量、商机跟进等营销指标" },
 ];
 
 const dataLogs = [
-  { time: "2025-06-20 14:32", system: "MES", indicator: "OEE 设备综合效率", employee: "张伟", value: "81.2%", status: "成功" },
-  { time: "2025-06-20 14:32", system: "MES", indicator: "工时利用率", employee: "李明", value: "87.5%", status: "成功" },
-  { time: "2025-06-20 14:30", system: "ERP", indicator: "费用预算执行偏差", employee: "—", value: "3.2%", status: "成功" },
-  { time: "2025-06-20 14:28", system: "QMS", indicator: "千件不良数", employee: "—", value: "298 PPM", status: "成功" },
-  { time: "2025-06-20 14:25", system: "钉钉", indicator: "出勤率", employee: "全员", value: "97.8%", status: "成功" },
-  { time: "2025-06-20 14:20", system: "OA", indicator: "项目里程碑达成", employee: "赵六", value: "3/4", status: "成功" },
-  { time: "2025-06-20 14:15", system: "MES", indicator: "订单交付准时率", employee: "—", value: "96.4%", status: "失败" },
-  { time: "2025-06-20 14:10", system: "ERP", indicator: "回款及时率", employee: "—", value: "91.8%", status: "成功" },
-  { time: "2025-06-20 14:05", system: "MES", indicator: "良品率", employee: "—", value: "99.1%", status: "失败" },
-  { time: "2025-06-20 14:00", system: "企微", indicator: "消息触达率", employee: "全员", value: "99.5%", status: "成功" },
+  { time: "2025-06-20 14:32", system: "钉钉", indicator: "出勤率", employee: "全员", value: "97.8%", status: "成功" },
+  { time: "2025-06-20 14:30", system: "钉钉", indicator: "请假审批通过数", employee: "全员", value: "3", status: "成功" },
+  { time: "2025-06-20 14:28", system: "ERP", indicator: "销售订单额", employee: "—", value: "128.6 万", status: "成功" },
+  { time: "2025-06-20 14:25", system: "钉钉", indicator: "加班工时", employee: "全员", value: "12.5h", status: "成功" },
+  { time: "2025-06-20 14:20", system: "ERP", indicator: "回款及时率", employee: "—", value: "91.8%", status: "成功" },
+  { time: "2025-06-20 14:15", system: "ERP", indicator: "采购交付准时率", employee: "—", value: "94.2%", status: "成功" },
+  { time: "2025-06-20 14:10", system: "钉钉", indicator: "组织架构变更", employee: "—", value: "新增 2 人", status: "成功" },
+  { time: "2025-06-20 14:05", system: "ERP", indicator: "库存周转天数", employee: "—", value: "32 天", status: "成功" },
+  { time: "2025-06-20 14:00", system: "钉钉", indicator: "花名册同步", employee: "全员", value: "202 人", status: "成功" },
+  { time: "2025-06-20 13:55", system: "ERP", indicator: "费用预算执行偏差", employee: "—", value: "3.2%", status: "成功" },
 ];
 
 /* ================== 实时进度 ================== */
@@ -377,7 +375,7 @@ export default function Performance() {
   }, [family, search]);
 
   const isConfigTab = tab === "strategy" || tab === "library" || tab === "data";
-  const connectedCount = bizSystems.filter((s) => s.connected).length;
+  const connectedCount = dataSources.filter((s) => s.connected).length;
   const failedLogs = dataLogs.filter((l) => l.status === "失败").length;
 
   return (
@@ -958,68 +956,116 @@ export default function Performance() {
           </div>
         )}
 
-        {/* ============ 过程数据（业务系统联通中心）============ */}
+        {/* ============ 过程数据中心 ============ */}
         {tab === "data" && (
           <div className="space-y-4">
-            {/* 顶部 3 个统计卡 */}
-            <div className="grid grid-cols-3 gap-3">
-              <Card className="p-4">
-                <div className="text-xs text-muted-foreground">已联通系统</div>
-                <div className="mt-1 text-2xl font-semibold">{connectedCount}<span className="text-base font-normal text-muted-foreground">/{bizSystems.length}</span></div>
+            {/* 顶部 4 个 KPI 卡 */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/10 to-primary/5 p-4">
+                <Database className="absolute -right-2 -top-2 h-16 w-16 text-primary/10" />
+                <div className="text-xs text-muted-foreground">已对接系统</div>
+                <div className="mt-1 text-2xl font-bold text-primary">{connectedCount}<span className="text-base font-normal text-muted-foreground"> 个</span></div>
               </Card>
-              <Card className="p-4">
-                <div className="text-xs text-muted-foreground">今日抓取数据</div>
-                <div className="mt-1 text-2xl font-semibold">1,248 <span className="text-base font-normal text-muted-foreground">条</span></div>
+              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/10 to-primary/5 p-4">
+                <LineChart className="absolute -right-2 -top-2 h-16 w-16 text-primary/10" />
+                <div className="text-xs text-muted-foreground">自动化指标</div>
+                <div className="mt-1 text-2xl font-bold text-primary">20<span className="text-base font-normal text-muted-foreground">/58 (34%)</span></div>
               </Card>
-              <Card className="p-4">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  抓取失败
-                  {failedLogs > 0 && <span className="inline-block h-2 w-2 rounded-full bg-rose-500" />}
-                </div>
-                <div className="mt-1 text-2xl font-semibold text-rose-600">{failedLogs} <span className="text-base font-normal text-muted-foreground">条</span></div>
+              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/10 to-primary/5 p-4">
+                <RefreshCw className="absolute -right-2 -top-2 h-16 w-16 text-primary/10" />
+                <div className="text-xs text-muted-foreground">今日同步</div>
+                <div className="mt-1 text-2xl font-bold text-primary">319<span className="text-base font-normal text-muted-foreground"> 条</span></div>
+              </Card>
+              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/10 to-primary/5 p-4">
+                <AlertTriangle className="absolute -right-2 -top-2 h-16 w-16 text-primary/10" />
+                <div className="text-xs text-muted-foreground">待处理异常</div>
+                <div className="mt-1 text-2xl font-bold text-emerald-600">0<span className="text-base font-normal text-muted-foreground"> 条</span></div>
               </Card>
             </div>
 
-            {/* 系统卡片网格 */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {bizSystems.map((sys) => (
-                <Card key={sys.key} className={cn("p-4", !sys.connected && "opacity-70")}>
-                  <div className="flex items-center gap-3">
+            {/* 数据源卡片（纵向） */}
+            <div className="space-y-3">
+              {dataSources.map((src) => (
+                <Card
+                  key={src.key}
+                  className={cn(
+                    "group p-5 transition-all hover:shadow-md",
+                    src.planned && "border-dashed border-2 opacity-80",
+                  )}
+                >
+                  <div className="flex items-start gap-4">
+                    {/* 图标 */}
                     <div className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-lg",
-                      sys.connected ? "bg-primary-soft text-primary" : "bg-muted text-muted-foreground",
+                      "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
+                      src.connected
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground",
                     )}>
-                      <Database className="h-5 w-5" />
+                      <Database className="h-6 w-6" />
                     </div>
+
+                    {/* 信息区 */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold">{sys.name}</div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {sys.connected ? (
-                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-base font-semibold">{src.name}</span>
+                        {src.connected ? (
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
                             <CheckCircle2 className="mr-1 h-3 w-3" />
-                            已联通
+                            已对接
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="bg-muted text-muted-foreground border-border text-[10px]">
-                            未联通
+                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+                            🟡 规划中
                           </Badge>
                         )}
                       </div>
+                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{src.description}</p>
+
+                      {/* 模块标签 */}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {src.modules.map((m) => (
+                          <Badge key={m} variant="secondary" className="text-[11px] font-normal">
+                            {m}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 右侧指标 */}
+                    <div className="flex shrink-0 gap-6 text-center">
+                      <div>
+                        <div className="text-lg font-bold text-primary">{src.indicators}</div>
+                        <div className="text-[11px] text-muted-foreground">{src.planned ? "预计指标" : "支撑指标"}</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-bold">{src.todaySync || "—"}</div>
+                        <div className="text-[11px] text-muted-foreground">今日同步</div>
+                      </div>
+                      {src.connected && (
+                        <div>
+                          <div className="text-sm font-medium text-muted-foreground">{src.lastSync}</div>
+                          <div className="text-[11px] text-muted-foreground">最近同步</div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    <div>覆盖指标 <span className="font-medium text-foreground">{sys.indicators}</span> 个</div>
-                    <div>最近同步 <span className="font-medium text-foreground">{sys.lastSync}</span></div>
-                  </div>
-                  <div className="mt-3">
-                    {sys.connected ? (
-                      <Button variant="outline" size="sm" className="w-full" onClick={() => toast.info(`${sys.name} 字段映射详情`)}>
-                        查看字段映射
-                      </Button>
+
+                  {/* 底部操作 */}
+                  <div className="mt-3 flex items-center justify-end gap-2 border-t pt-3">
+                    {src.connected ? (
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => toast.info(`${src.name} 字段映射详情`)}>
+                          查看字段映射
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => toast.info(`${src.name} 同步日志`)}>
+                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                          同步日志
+                        </Button>
+                      </>
                     ) : (
-                      <Button size="sm" className="w-full" onClick={() => setConnectDialogSystem(sys.name)}>
-                        <Link2 className="mr-1.5 h-3.5 w-3.5" />
-                        立即联通 →
+                      <Button size="sm" onClick={() => toast.info("已提交 CRM 对接需求，技术团队将在 3 个工作日内联系您")}>
+                        <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                        提交对接需求
                       </Button>
                     )}
                   </div>
@@ -1027,10 +1073,21 @@ export default function Performance() {
               ))}
             </div>
 
+            {/* 底部蓝色提示条 */}
+            <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
+              <div className="flex items-start gap-3">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <div className="text-sm text-foreground leading-relaxed">
+                  <p>58 个指标中 <span className="font-semibold text-primary">20 个自动取数</span>，38 个通过在线填表 + Excel 导入收集。</p>
+                  <p className="mt-1 text-muted-foreground">管理 / 销售岗自动化 70%+，生产 / 研发岗依赖人工填报。</p>
+                </div>
+              </div>
+            </div>
+
             {/* 数据流日志 */}
             <Card className="p-5">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">数据流日志（最近 50 条）</h3>
+                <h3 className="text-sm font-semibold">最近同步记录</h3>
                 <Button variant="ghost" size="sm" onClick={() => toast.info("刷新日志")}>
                   <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                   刷新
@@ -1136,9 +1193,9 @@ export default function Performance() {
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                 <div>
-                  <span className="text-sm font-medium">过程数据：3 个业务系统待联通</span>
+                  <span className="text-sm font-medium">过程数据：CRM 待对接</span>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {bizSystems.map((sys) => (
+                    {dataSources.map((sys) => (
                       <Badge
                         key={sys.key}
                         variant="outline"
@@ -1146,10 +1203,10 @@ export default function Performance() {
                           "text-[10px]",
                           sys.connected
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-muted text-muted-foreground",
+                            : "bg-amber-50 text-amber-700 border-amber-200",
                         )}
                       >
-                        {sys.key} {sys.connected ? "✓" : "✗"}
+                        {sys.name} {sys.connected ? "✓" : "规划中"}
                       </Badge>
                     ))}
                   </div>
