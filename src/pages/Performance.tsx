@@ -344,12 +344,10 @@ export default function Performance() {
   const [completenessOpen, setCompletenessOpen] = useState(false);
   const [connectDialogSystem, setConnectDialogSystem] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
-
-  // 战略目标 state
-  const [company, setCompany] = useState<CompanyStrategy>(initialCompany);
-  const [depts, setDepts] = useState<DeptStrategy[]>(initialDepts);
-  const [editingCompany, setEditingCompany] = useState(false);
-  const [editingDept, setEditingDept] = useState<string | null>(null);
+  const [personalSheetDept, setPersonalSheetDept] = useState<string | null>(null);
+  const [aiGeneratingPersonal, setAiGeneratingPersonal] = useState(false);
+  const [personalData, setPersonalData] = useState<Record<string, PersonalKpi[]>>(deptPersonalKpis);
+  const [editingPersonalIdx, setEditingPersonalIdx] = useState<number | null>(null);
 
   const companyWeightSum = company.items.reduce((s, it) => s + (parseInt(it.weight) || 0), 0);
 
