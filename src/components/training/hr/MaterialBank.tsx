@@ -446,65 +446,156 @@ export default function MaterialBank() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Question Dialog */}
-      <Dialog open={addQOpen} onOpenChange={v => { if (!v) { setNewQ({ ...emptyNewQ }); setAddQOpen(false); } }}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
+      {/* AI Add Question Dialog */}
+      <Dialog open={addQOpen} onOpenChange={v => { if (!v) { resetAddQ(); setAddQOpen(false); } }}>
+        <DialogContent className="sm:max-w-lg rounded-2xl">
           <DialogHeader>
-            <DialogTitle>新增题目</DialogTitle>
-            <DialogDescription>手动录入单选题或判断题，保存后直接加入题库</DialogDescription>
+            <DialogTitle>
+              {addQStep === "input" && "AI 智能出题"}
+              {addQStep === "generating" && "AI 正在生成题目..."}
+              {addQStep === "preview" && "AI 生成题目预览"}
+            </DialogTitle>
+            {addQStep === "input" && (
+              <DialogDescription>输入知识点主题，AI 自动生成单选题和判断题，支持人工修改</DialogDescription>
+            )}
           </DialogHeader>
-          <div className="space-y-3">
-            {/* Type selector */}
-            <div className="flex gap-2">
-              <Button size="sm" variant={newQ.type === "single" ? "default" : "outline"} className="rounded-lg" onClick={() => setNewQ(p => ({ ...p, type: "single", answer: "" }))}>单选题</Button>
-              <Button size="sm" variant={newQ.type === "judge" ? "default" : "outline"} className="rounded-lg" onClick={() => setNewQ(p => ({ ...p, type: "judge", optionA: "正确", optionB: "错误", optionC: "", optionD: "", answer: "" }))}>判断题</Button>
-            </div>
 
-            {/* Stem */}
-            <div>
-              <Label className="text-xs">题干 *</Label>
-              <Input className="mt-1" placeholder="请输入题目内容" value={newQ.text} onChange={e => setNewQ(p => ({ ...p, text: e.target.value }))} />
+          {/* Step: Input topic */}
+          {addQStep === "input" && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs font-medium">知识点主题 *</Label>
+                <Input className="mt-1" placeholder="例如：LED封装工艺安全规范" value={addQTopic} onChange={e => setAddQTopic(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs font-medium">生成数量</Label>
+                <div className="flex gap-2 mt-1">
+                  {[3, 5, 8, 10].map(n => (
+                    <Button key={n} size="sm" variant={addQCount === n ? "default" : "outline"} className="rounded-lg" onClick={() => setAddQCount(n)}>{n} 题</Button>
+                  ))}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" className="rounded-lg" onClick={() => { resetAddQ(); setAddQOpen(false); }}>取消</Button>
+                <Button className="rounded-lg" disabled={!addQTopic.trim()} onClick={handleAiGenerate}>
+                  <Sparkles className="h-4 w-4 mr-1" />AI 生成
+                </Button>
+              </DialogFooter>
             </div>
+          )}
 
-            {/* Options */}
-            {newQ.type === "single" ? (
-              <div className="grid grid-cols-2 gap-2">
-                {(["A", "B", "C", "D"] as const).map(letter => {
-                  const key = `option${letter}` as keyof NewQuestion;
+          {/* Step: Generating */}
+          {addQStep === "generating" && (
+            <div className="py-12 text-center space-y-4">
+              <div className="relative mx-auto w-16 h-16">
+                <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                <Sparkles className="h-6 w-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+              </div>
+              <div>
+                <p className="text-base font-medium">AI 正在围绕「{addQTopic}」生成题目</p>
+                <p className="text-sm text-muted-foreground mt-1">预计生成 {addQCount} 道单选题和判断题...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Step: Preview & Edit */}
+          {addQStep === "preview" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm">
+                  主题：<span className="font-medium">「{addQTopic}」</span>　
+                  已生成 <span className="font-bold text-primary">{aiQuestions.length}</span> 道，
+                  保留 <span className="font-bold text-emerald-600">{aiKeptCount}</span> 道
+                </p>
+                <Button variant="ghost" size="sm" className="text-xs" onClick={handleAiRegenerate}>
+                  <Sparkles className="h-3.5 w-3.5 mr-1" />全部重新生成
+                </Button>
+              </div>
+
+              <div className="max-h-[350px] overflow-y-auto space-y-2 pr-1">
+                {aiQuestions.map((q, idx) => {
+                  const removed = aiRemovedIds.has(q.id);
+                  const isEditing = editingQ?.id === q.id;
+
+                  if (isEditing && editingQ) {
+                    return (
+                      <div key={q.id} className="p-3 rounded-xl border-2 border-primary/30 bg-primary/5 text-sm space-y-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{editingQ.type === "single" ? "单选" : "判断"}</Badge>
+                          <span className="text-xs text-muted-foreground">编辑中</span>
+                        </div>
+                        <Input value={editingQ.text} onChange={e => setEditingQ({ ...editingQ, text: e.target.value })} placeholder="题干" />
+                        {editingQ.type === "single" && (
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {editingQ.options.map((opt, i) => (
+                              <div key={i} className="flex items-center gap-1">
+                                <span className="text-xs font-medium w-4">{String.fromCharCode(65 + i)}.</span>
+                                <Input className="h-8 text-xs" value={opt} onChange={e => {
+                                  const newOpts = [...editingQ.options];
+                                  newOpts[i] = e.target.value;
+                                  setEditingQ({ ...editingQ, options: newOpts });
+                                }} />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs">正确答案：</span>
+                          {editingQ.options.map((opt, i) => (
+                            <Button key={i} size="sm" variant={editingQ.answer === opt ? "default" : "outline"} className="h-6 text-xs rounded px-2"
+                              onClick={() => setEditingQ({ ...editingQ, answer: opt })}>
+                              {String.fromCharCode(65 + i)}
+                            </Button>
+                          ))}
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={cancelEditQ}>取消</Button>
+                          <Button size="sm" className="h-7 text-xs rounded-lg" onClick={saveEditQ}>保存修改</Button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div key={letter}>
-                      <Label className="text-xs">选项 {letter} {letter <= "B" && "*"}</Label>
-                      <Input className="mt-1" placeholder={`选项 ${letter}`} value={newQ[key] as string} onChange={e => setNewQ(p => ({ ...p, [key]: e.target.value }))} />
+                    <div key={q.id} className={`p-3 rounded-xl border text-sm transition-all ${removed ? "opacity-40 bg-muted/30" : "bg-card"}`}>
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 shrink-0 mt-0.5">{idx + 1}.</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{q.type === "single" ? "单选" : "判断"}</Badge>
+                          </div>
+                          <p className={`text-sm ${removed ? "line-through" : ""}`}>{q.text}</p>
+                          <div className="mt-1 space-y-0.5">
+                            {q.options.map((opt, i) => (
+                              <div key={i} className={`text-xs ${opt === q.answer ? "text-emerald-700 font-medium" : "text-muted-foreground"}`}>
+                                {String.fromCharCode(65 + i)}. {opt} {opt === q.answer && "✓"}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1 shrink-0">
+                          {!removed && (
+                            <Button variant="ghost" size="sm" className="h-6 text-xs text-primary" onClick={() => startEditQ(q)}>编辑</Button>
+                          )}
+                          <Button variant="ghost" size="sm" className={`h-6 text-xs ${removed ? "text-primary" : "text-destructive"}`}
+                            onClick={() => setAiRemovedIds(prev => { const n = new Set(prev); n.has(q.id) ? n.delete(q.id) : n.add(q.id); return n; })}>
+                            {removed ? "恢复" : "移除"}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            ) : (
-              <div className="flex gap-4 text-sm text-muted-foreground">
-                <span>A. 正确</span><span>B. 错误</span>
-              </div>
-            )}
 
-            {/* Answer */}
-            <div>
-              <Label className="text-xs">正确答案 *</Label>
-              <div className="flex gap-2 mt-1">
-                {(newQ.type === "single" ? ["A", "B", "C", "D"] : ["A", "B"]).map(v => (
-                  <Button key={v} size="sm" variant={newQ.answer === v ? "default" : "outline"} className="rounded-lg w-10" onClick={() => setNewQ(p => ({ ...p, answer: v }))}>{v}</Button>
-                ))}
-              </div>
+              <DialogFooter>
+                <Button variant="outline" className="rounded-lg" onClick={() => setAddQStep("input")}>返回修改主题</Button>
+                <Button className="rounded-lg" onClick={handleAiConfirm} disabled={aiKeptCount === 0}>
+                  <CheckCircle className="h-4 w-4 mr-1" />确认入库（{aiKeptCount} 题）
+                </Button>
+              </DialogFooter>
             </div>
-
-            {/* Topic */}
-            <div>
-              <Label className="text-xs">知识点（可选）</Label>
-              <Input className="mt-1" placeholder="例如：焊接安全" value={newQ.topic} onChange={e => setNewQ(p => ({ ...p, topic: e.target.value }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" className="rounded-lg" onClick={() => { setNewQ({ ...emptyNewQ }); setAddQOpen(false); }}>取消</Button>
-            <Button className="rounded-lg" onClick={handleAddQ}>确认添加</Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </div>
