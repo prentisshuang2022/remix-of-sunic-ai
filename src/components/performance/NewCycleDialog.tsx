@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, CheckCircle2, Sparkles, Users } from "lucide-react";
+import { CalendarIcon, CheckCircle2, FileSpreadsheet, Sparkles, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -392,6 +392,36 @@ export function NewCycleDialog({ open, onOpenChange }: Props) {
                 </div>
                 <Switch checked={autoUrge} onCheckedChange={setAutoUrge} />
               </div>
+            </div>
+
+            {/* 指标库引用预览 */}
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
+                📊 本次考核将引用的指标（来自指标库）
+              </div>
+              <div className="mt-2 space-y-1.5 text-[11px] text-muted-foreground">
+                {[
+                  { dept: "研发部", count: 4, examples: "新产品 NPI 周期 / BOM 标准化率 / ..." },
+                  { dept: "生产管理部", count: 4, examples: "OEE / 订单准时率 / 良品率 / ..." },
+                  { dept: "品质管理部", count: 3, examples: "PPM / 首件合格率 / 客诉响应 / ..." },
+                  { dept: "营销中心", count: 3, examples: "回款率 / 大客户渗透 / 新客户 / ..." },
+                ].filter(() => scope === "all" || selectedDepts.length > 0).map((d) => (
+                  <div key={d.dept} className="flex items-center gap-2">
+                    <span className="font-medium text-foreground">{d.dept}：</span>
+                    <span>{d.count} 个指标（{d.examples}）</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-[11px]">
+                合计引用 <span className="font-medium text-foreground">38</span> 个指标，其中 <span className="font-medium text-foreground">30</span> 个自动抓取、<span className="font-medium text-foreground">8</span> 个需手工填报
+              </div>
+              <button
+                className="mt-1.5 text-[11px] text-primary hover:underline"
+                onClick={() => toast.info("跳转到配置中心 · 指标库")}
+              >
+                查看完整列表 →
+              </button>
             </div>
           </div>
         )}
