@@ -134,8 +134,57 @@ const historyCycles = [
 
 /* ================== 战略目标分解 ================== */
 interface KpiItem { kpi: string; target: string; weight: string }
-interface DeptStrategy { name: string; head: string; kpis: KpiItem[] }
+interface PersonalKpi { employee: string; role: string; kpis: { kpi: string; target: string; weight: string; source: string }[] }
+interface DeptStrategy { name: string; head: string; kpis: KpiItem[]; personalKpis?: PersonalKpi[] }
 interface CompanyStrategy { title: string; period: string; items: KpiItem[] }
+
+/* ================== 个人 KPI 拆解 Mock 数据 ================== */
+const deptPersonalKpis: Record<string, PersonalKpi[]> = {
+  "研发部": [
+    { employee: "张海峰", role: "高级光学工程师", kpis: [
+      { kpi: "光路调试一次通过率", target: "≥ 95%", weight: "35%", source: "PLM" },
+      { kpi: "新产品设计评审通过率", target: "≥ 90%", weight: "30%", source: "PLM" },
+      { kpi: "BOM 成本优化项", target: "≥ 3 项", weight: "20%", source: "ERP" },
+      { kpi: "专利申请", target: "≥ 2 项", weight: "15%", source: "手工填报" },
+    ]},
+    { employee: "王晓燕", role: "算法工程师", kpis: [
+      { kpi: "算法精度提升", target: "≥ 5%", weight: "40%", source: "测试报告" },
+      { kpi: "需求按时交付率", target: "≥ 95%", weight: "35%", source: "PLM" },
+      { kpi: "技术文档完成率", target: "100%", weight: "25%", source: "手工填报" },
+    ]},
+    { employee: "李志强", role: "结构工程师", kpis: [
+      { kpi: "图纸一次性通过率", target: "≥ 92%", weight: "35%", source: "PLM" },
+      { kpi: "BOM 标准化率", target: "≥ 88%", weight: "30%", source: "ERP" },
+      { kpi: "项目进度达成", target: "≥ 95%", weight: "35%", source: "手工填报" },
+    ]},
+  ],
+  "生产管理部": [
+    { employee: "刘伟", role: "生产主管", kpis: [
+      { kpi: "产线 OEE", target: "≥ 80%", weight: "30%", source: "钉钉" },
+      { kpi: "订单准时交付率", target: "≥ 98%", weight: "35%", source: "ERP" },
+      { kpi: "安全事故数", target: "0", weight: "20%", source: "手工填报" },
+      { kpi: "工时利用率", target: "≥ 88%", weight: "15%", source: "钉钉" },
+    ]},
+    { employee: "赵丽华", role: "质检组长", kpis: [
+      { kpi: "良品率", target: "≥ 99.2%", weight: "40%", source: "手工填报" },
+      { kpi: "检验及时率", target: "100%", weight: "30%", source: "手工填报" },
+      { kpi: "不良品追溯完成率", target: "100%", weight: "30%", source: "手工填报" },
+    ]},
+  ],
+  "营销中心": [
+    { employee: "孙超", role: "大客户经理", kpis: [
+      { kpi: "负责客户回款额", target: "≥ 3.2 亿", weight: "40%", source: "ERP" },
+      { kpi: "新客户开发", target: "≥ 8 家", weight: "25%", source: "手工填报" },
+      { kpi: "客户满意度评分", target: "≥ 92 分", weight: "20%", source: "手工填报" },
+      { kpi: "商机转化率", target: "≥ 25%", weight: "15%", source: "手工填报" },
+    ]},
+    { employee: "吴婷", role: "区域销售经理", kpis: [
+      { kpi: "区域销售额", target: "≥ 1.8 亿", weight: "45%", source: "ERP" },
+      { kpi: "新客户拜访量", target: "≥ 60 次/季", weight: "25%", source: "手工填报" },
+      { kpi: "报价响应时长", target: "≤ 24h", weight: "30%", source: "手工填报" },
+    ]},
+  ],
+};
 
 const initialCompany: CompanyStrategy = {
   title: "2025 年公司战略目标",
