@@ -31,7 +31,7 @@ const helpers = [
   { title: "工作台", url: "/", icon: LayoutDashboard },
   { title: "员工管理", url: "/employees", icon: UserSquare2 },
   { title: "考勤助手", url: "/attendance", icon: CalendarClock },
-  { title: "招聘管理", url: "/recruiting", icon: Briefcase },
+  { title: "招聘助手", url: "/recruiting", icon: Briefcase },
   { title: "绩效助手", url: "/performance", icon: LineChart },
   { title: "培训助手", url: "/training", icon: GraduationCap },
   { title: "知识库管理", url: "/knowledge", icon: BookOpen },
