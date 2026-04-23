@@ -105,19 +105,6 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      {!collapsed && (
-        <SidebarFooter className="border-t p-3">
-          <div className="rounded-lg bg-muted/60 p-3">
-            <p className="text-xs font-medium text-foreground">规则引擎</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">5条规则运行中</p>
-            <div className="flex gap-1.5 mt-2">
-              {ruleColors.map((c, i) => (
-                <div key={i} className={cn("h-2 w-2 rounded-full", c)} />
-              ))}
-            </div>
-          </div>
-        </SidebarFooter>
-      )}
     </Sidebar>
   );
 }
