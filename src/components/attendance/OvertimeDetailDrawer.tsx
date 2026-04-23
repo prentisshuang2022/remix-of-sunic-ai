@@ -163,9 +163,6 @@ export default function OvertimeDetailDrawer({ open, onOpenChange, detail }: Pro
                 <p className="text-xs text-[#6B7280] mt-0.5">{detail.dept} · {detail.position} · {detail.campus}</p>
               </div>
             </div>
-            <button onClick={() => onOpenChange(false)} className="p-1 rounded hover:bg-gray-100 text-[#6B7280]">
-              <X className="h-4 w-4" />
-            </button>
           </div>
           <div className="flex flex-wrap gap-2 mt-3">
             <Badge variant="outline" className="rounded-full text-xs bg-gray-100 text-[#374151] border-gray-200">{detail.date}</Badge>
