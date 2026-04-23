@@ -387,6 +387,68 @@ export default function MaterialBank() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Add Question Dialog */}
+      <Dialog open={addQOpen} onOpenChange={v => { if (!v) { setNewQ({ ...emptyNewQ }); setAddQOpen(false); } }}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>新增题目</DialogTitle>
+            <DialogDescription>手动录入单选题或判断题，保存后直接加入题库</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {/* Type selector */}
+            <div className="flex gap-2">
+              <Button size="sm" variant={newQ.type === "single" ? "default" : "outline"} className="rounded-lg" onClick={() => setNewQ(p => ({ ...p, type: "single", answer: "" }))}>单选题</Button>
+              <Button size="sm" variant={newQ.type === "judge" ? "default" : "outline"} className="rounded-lg" onClick={() => setNewQ(p => ({ ...p, type: "judge", optionA: "正确", optionB: "错误", optionC: "", optionD: "", answer: "" }))}>判断题</Button>
+            </div>
+
+            {/* Stem */}
+            <div>
+              <Label className="text-xs">题干 *</Label>
+              <Input className="mt-1" placeholder="请输入题目内容" value={newQ.text} onChange={e => setNewQ(p => ({ ...p, text: e.target.value }))} />
+            </div>
+
+            {/* Options */}
+            {newQ.type === "single" ? (
+              <div className="grid grid-cols-2 gap-2">
+                {(["A", "B", "C", "D"] as const).map(letter => {
+                  const key = `option${letter}` as keyof NewQuestion;
+                  return (
+                    <div key={letter}>
+                      <Label className="text-xs">选项 {letter} {letter <= "B" && "*"}</Label>
+                      <Input className="mt-1" placeholder={`选项 ${letter}`} value={newQ[key] as string} onChange={e => setNewQ(p => ({ ...p, [key]: e.target.value }))} />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex gap-4 text-sm text-muted-foreground">
+                <span>A. 正确</span><span>B. 错误</span>
+              </div>
+            )}
+
+            {/* Answer */}
+            <div>
+              <Label className="text-xs">正确答案 *</Label>
+              <div className="flex gap-2 mt-1">
+                {(newQ.type === "single" ? ["A", "B", "C", "D"] : ["A", "B"]).map(v => (
+                  <Button key={v} size="sm" variant={newQ.answer === v ? "default" : "outline"} className="rounded-lg w-10" onClick={() => setNewQ(p => ({ ...p, answer: v }))}>{v}</Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Topic */}
+            <div>
+              <Label className="text-xs">知识点（可选）</Label>
+              <Input className="mt-1" placeholder="例如：焊接安全" value={newQ.topic} onChange={e => setNewQ(p => ({ ...p, topic: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-lg" onClick={() => { setNewQ({ ...emptyNewQ }); setAddQOpen(false); }}>取消</Button>
+            <Button className="rounded-lg" onClick={handleAddQ}>确认添加</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
