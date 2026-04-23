@@ -29,6 +29,19 @@ export default function HRDashboard() {
 
   return (
     <div className="space-y-6 max-w-5xl">
+      {/* Quick actions - moved to top */}
+      <div className="flex flex-wrap gap-3">
+        <Button className="bg-[#1E6FFF] hover:bg-[#1E6FFF]/90 text-white rounded-xl h-10 px-5" onClick={() => setHRTab("tasks")}>
+          <Plus className="h-4 w-4 mr-1.5" />派新培训
+        </Button>
+        <Button variant="outline" className="rounded-xl h-10 px-5" onClick={() => setHRTab("materials")}>
+          <Upload className="h-4 w-4 mr-1.5" />上传素材
+        </Button>
+        <Button variant="outline" className="rounded-xl h-10 px-5" onClick={() => setHRTab("materials")}>
+          <PenLine className="h-4 w-4 mr-1.5" />新增题目
+        </Button>
+      </div>
+
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map(s => (
@@ -84,24 +97,6 @@ export default function HRDashboard() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Quick actions */}
-      <Card className="rounded-2xl shadow-sm">
-        <CardContent className="p-5">
-          <h3 className="text-sm font-semibold mb-4">快捷操作</h3>
-          <div className="flex flex-wrap gap-3">
-            <Button className="bg-[#1E6FFF] hover:bg-[#1E6FFF]/90 text-white rounded-xl h-12 px-6" onClick={() => setHRTab("tasks")}>
-              <Plus className="h-4 w-4 mr-1.5" />派新培训
-            </Button>
-            <Button variant="outline" className="rounded-xl h-12 px-6" onClick={() => setHRTab("materials")}>
-              <Upload className="h-4 w-4 mr-1.5" />上传素材
-            </Button>
-            <Button variant="outline" className="rounded-xl h-12 px-6" onClick={() => setHRTab("materials")}>
-              <PenLine className="h-4 w-4 mr-1.5" />新增题目
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
