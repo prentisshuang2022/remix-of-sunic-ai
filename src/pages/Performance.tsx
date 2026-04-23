@@ -349,6 +349,12 @@ export default function Performance() {
   const [personalData, setPersonalData] = useState<Record<string, PersonalKpi[]>>(deptPersonalKpis);
   const [editingPersonalIdx, setEditingPersonalIdx] = useState<number | null>(null);
 
+  // 战略目标 state
+  const [company, setCompany] = useState<CompanyStrategy>(initialCompany);
+  const [depts, setDepts] = useState<DeptStrategy[]>(initialDepts);
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [editingDept, setEditingDept] = useState<string | null>(null);
+
   const companyWeightSum = company.items.reduce((s, it) => s + (parseInt(it.weight) || 0), 0);
 
   // 首次引导
