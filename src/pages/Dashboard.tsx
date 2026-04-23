@@ -12,11 +12,14 @@ import {
   ArrowUpRight,
   CheckCircle2,
   Clock,
+  Settings,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 
 const stats = [
   { label: "今日待处理异常", value: "12", icon: AlertTriangle, tone: "warning" },
@@ -147,6 +150,35 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
+
+        {/* 绩效配置健康度 */}
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Settings className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">绩效配置健康度</h3>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/performance">
+                前往配置中心 →
+              </Link>
+            </Button>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <span className="text-2xl font-semibold">85%</span>
+            <Progress value={85} className="flex-1 h-2" />
+          </div>
+          <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <span>过程数据：CRM / PLM / EHS 未联通</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <span>指标库：营销中心仅 3 个指标，建议补充</span>
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   );

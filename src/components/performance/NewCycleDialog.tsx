@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, CheckCircle2, Sparkles, Users } from "lucide-react";
+import { CalendarIcon, CheckCircle2, FileSpreadsheet, Sparkles, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
