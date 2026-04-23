@@ -53,18 +53,36 @@ const mockExtractQuestions = (fileName: string): PreviewQuestion[] => {
   return base;
 };
 
-interface NewQuestion {
+// [FRONTEND-ONLY] AI-generated question flow state
+type AddQStep = "input" | "generating" | "preview";
+
+interface AiGenQuestion {
+  id: string;
   type: "single" | "judge";
   text: string;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
+  options: string[];
   answer: string;
-  topic: string;
+  editing?: boolean;
 }
 
-const emptyNewQ: NewQuestion = { type: "single", text: "", optionA: "", optionB: "", optionC: "", optionD: "", answer: "", topic: "" };
+const mockAiGenQuestions = (topic: string, count: number): AiGenQuestion[] => {
+  const singles: Omit<AiGenQuestion, "id">[] = [
+    { type: "single", text: `关于"${topic}"，以下哪项操作是规范的？`, options: ["按标准流程执行", "跳过安全检查", "凭经验操作", "无需记录"], answer: "按标准流程执行" },
+    { type: "single", text: `在"${topic}"作业中，发现异常应首先？`, options: ["继续观察", "立即停机报告", "自行维修", "通知同事帮忙"], answer: "立即停机报告" },
+    { type: "single", text: `"${topic}"要求的防护装备不包括？`, options: ["安全帽", "护目镜", "拖鞋", "防护手套"], answer: "拖鞋" },
+    { type: "single", text: `"${topic}"中设备日常点检频率是？`, options: ["每班次", "每周", "每月", "每季度"], answer: "每班次" },
+    { type: "single", text: `"${topic}"规定的标准作业环境温度范围？`, options: ["0-15°C", "18-26°C", "30-40°C", "不限"], answer: "18-26°C" },
+  ];
+  const judges: Omit<AiGenQuestion, "id">[] = [
+    { type: "judge", text: `"${topic}"操作前必须确认设备安全状态。`, options: ["正确", "错误"], answer: "正确" },
+    { type: "judge", text: `未经${topic}培训的员工可以独立上岗操作。`, options: ["正确", "错误"], answer: "错误" },
+    { type: "judge", text: `${topic}相关操作记录需保存至少一年。`, options: ["正确", "错误"], answer: "正确" },
+    { type: "judge", text: `${topic}作业中可以边操作边使用手机。`, options: ["正确", "错误"], answer: "错误" },
+    { type: "judge", text: `${topic}的安全事故必须在24小时内上报。`, options: ["正确", "错误"], answer: "正确" },
+  ];
+  const pool = [...singles, ...judges].sort(() => Math.random() - 0.5).slice(0, count);
+  return pool.map((q, i) => ({ ...q, id: `aq-${Date.now()}-${i}` }));
+};
 
 export default function MaterialBank() {
   const [tab, setTab] = useState<"courseware" | "questions">("courseware");
@@ -76,23 +94,63 @@ export default function MaterialBank() {
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // [FRONTEND-ONLY] New question dialog state
+  // [FRONTEND-ONLY] AI new question dialog state
   const [addQOpen, setAddQOpen] = useState(false);
-  const [newQ, setNewQ] = useState<NewQuestion>({ ...emptyNewQ });
+  const [addQStep, setAddQStep] = useState<AddQStep>("input");
+  const [addQTopic, setAddQTopic] = useState("");
+  const [addQCount, setAddQCount] = useState(5);
+  const [aiQuestions, setAiQuestions] = useState<AiGenQuestion[]>([]);
+  const [aiRemovedIds, setAiRemovedIds] = useState<Set<string>>(new Set());
+  const [editingQ, setEditingQ] = useState<AiGenQuestion | null>(null);
 
-  const handleAddQ = () => {
-    if (!newQ.text.trim() || !newQ.answer) {
-      toast.error("请填写题干和正确答案");
-      return;
-    }
-    if (newQ.type === "single" && (!newQ.optionA || !newQ.optionB)) {
-      toast.error("单选题至少填写 A、B 两个选项");
-      return;
-    }
-    setAddQOpen(false);
-    setNewQ({ ...emptyNewQ });
-    toast.success("题目已添加到题库");
+  const resetAddQ = () => {
+    setAddQStep("input");
+    setAddQTopic("");
+    setAddQCount(5);
+    setAiQuestions([]);
+    setAiRemovedIds(new Set());
+    setEditingQ(null);
   };
+
+  const handleAiGenerate = () => {
+    if (!addQTopic.trim()) { toast.error("请输入知识点主题"); return; }
+    setAddQStep("generating");
+    // [FRONTEND-ONLY] Simulate AI generation delay
+    setTimeout(() => {
+      setAiQuestions(mockAiGenQuestions(addQTopic, addQCount));
+      setAiRemovedIds(new Set());
+      setAddQStep("preview");
+    }, 1800);
+  };
+
+  const handleAiRegenerate = () => {
+    setAddQStep("generating");
+    setTimeout(() => {
+      setAiQuestions(mockAiGenQuestions(addQTopic, addQCount));
+      setAiRemovedIds(new Set());
+      setEditingQ(null);
+      setAddQStep("preview");
+    }, 1500);
+  };
+
+  const handleAiConfirm = () => {
+    const kept = aiQuestions.filter(q => !aiRemovedIds.has(q.id));
+    if (kept.length === 0) { toast.error("至少保留一道题目"); return; }
+    setAddQOpen(false);
+    resetAddQ();
+    toast.success(`已添加 ${kept.length} 道 AI 生成题目到题库`);
+  };
+
+  const startEditQ = (q: AiGenQuestion) => setEditingQ({ ...q });
+  const cancelEditQ = () => setEditingQ(null);
+  const saveEditQ = () => {
+    if (!editingQ) return;
+    setAiQuestions(prev => prev.map(q => q.id === editingQ.id ? { ...editingQ, editing: false } : q));
+    setEditingQ(null);
+    toast.success("题目已修改");
+  };
+
+  const aiKeptCount = aiQuestions.filter(q => !aiRemovedIds.has(q.id)).length;
 
   const resetDialog = () => {
     setUploadStep("select");
