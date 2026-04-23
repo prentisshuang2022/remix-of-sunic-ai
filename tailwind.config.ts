@@ -81,6 +81,11 @@ export default {
           foreground: "hsl(var(--train-onsite-foreground))",
           soft: "hsl(var(--train-onsite-soft))",
         },
+        "sg-blue": {
+          DEFAULT: "hsl(var(--sg-blue))",
+          foreground: "hsl(var(--sg-blue-foreground))",
+          soft: "hsl(var(--sg-blue-soft))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
