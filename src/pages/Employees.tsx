@@ -211,7 +211,7 @@ export default function Employees() {
     <>
       <PageHeader
         title="员工档案管理"
-        description="武汉三工光电 · 钉钉为唯一数据源，本系统负责同步、校验与归档"
+        description="武汉三工光电 · 本系统负责同步、校验与归档"
         actions={
           <>
             <Button size="sm" onClick={() => toast.success("正在从钉钉同步员工信息…")}>
