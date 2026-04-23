@@ -34,7 +34,7 @@ const helpers = [
   { title: "招聘助手", url: "/recruiting", icon: Briefcase },
   { title: "绩效助手", url: "/performance", icon: LineChart },
   { title: "培训助手", url: "/training", icon: GraduationCap },
-  { title: "知识库管理", url: "/knowledge", icon: BookOpen },
+  { title: "人资知识库", url: "/knowledge", icon: BookOpen },
 ];
 
 const conversation = [
