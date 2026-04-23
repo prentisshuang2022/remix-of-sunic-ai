@@ -171,7 +171,7 @@ export default function Dashboard() {
           <div className="mt-3 space-y-2 text-xs text-muted-foreground">
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <span>过程数据：CRM / PLM / EHS 未联通</span>
+              <span>过程数据：CRM 待对接（钉钉 / ERP 已对接）</span>
             </div>
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
