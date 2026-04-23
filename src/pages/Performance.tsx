@@ -134,8 +134,57 @@ const historyCycles = [
 
 /* ================== 战略目标分解 ================== */
 interface KpiItem { kpi: string; target: string; weight: string }
-interface DeptStrategy { name: string; head: string; kpis: KpiItem[] }
+interface PersonalKpi { employee: string; role: string; kpis: { kpi: string; target: string; weight: string; source: string }[] }
+interface DeptStrategy { name: string; head: string; kpis: KpiItem[]; personalKpis?: PersonalKpi[] }
 interface CompanyStrategy { title: string; period: string; items: KpiItem[] }
+
+/* ================== 个人 KPI 拆解 Mock 数据 ================== */
+const deptPersonalKpis: Record<string, PersonalKpi[]> = {
+  "研发部": [
+    { employee: "张海峰", role: "高级光学工程师", kpis: [
+      { kpi: "光路调试一次通过率", target: "≥ 95%", weight: "35%", source: "PLM" },
+      { kpi: "新产品设计评审通过率", target: "≥ 90%", weight: "30%", source: "PLM" },
+      { kpi: "BOM 成本优化项", target: "≥ 3 项", weight: "20%", source: "ERP" },
+      { kpi: "专利申请", target: "≥ 2 项", weight: "15%", source: "手工填报" },
+    ]},
+    { employee: "王晓燕", role: "算法工程师", kpis: [
+      { kpi: "算法精度提升", target: "≥ 5%", weight: "40%", source: "测试报告" },
+      { kpi: "需求按时交付率", target: "≥ 95%", weight: "35%", source: "PLM" },
+      { kpi: "技术文档完成率", target: "100%", weight: "25%", source: "手工填报" },
+    ]},
+    { employee: "李志强", role: "结构工程师", kpis: [
+      { kpi: "图纸一次性通过率", target: "≥ 92%", weight: "35%", source: "PLM" },
+      { kpi: "BOM 标准化率", target: "≥ 88%", weight: "30%", source: "ERP" },
+      { kpi: "项目进度达成", target: "≥ 95%", weight: "35%", source: "手工填报" },
+    ]},
+  ],
+  "生产管理部": [
+    { employee: "刘伟", role: "生产主管", kpis: [
+      { kpi: "产线 OEE", target: "≥ 80%", weight: "30%", source: "钉钉" },
+      { kpi: "订单准时交付率", target: "≥ 98%", weight: "35%", source: "ERP" },
+      { kpi: "安全事故数", target: "0", weight: "20%", source: "手工填报" },
+      { kpi: "工时利用率", target: "≥ 88%", weight: "15%", source: "钉钉" },
+    ]},
+    { employee: "赵丽华", role: "质检组长", kpis: [
+      { kpi: "良品率", target: "≥ 99.2%", weight: "40%", source: "手工填报" },
+      { kpi: "检验及时率", target: "100%", weight: "30%", source: "手工填报" },
+      { kpi: "不良品追溯完成率", target: "100%", weight: "30%", source: "手工填报" },
+    ]},
+  ],
+  "营销中心": [
+    { employee: "孙超", role: "大客户经理", kpis: [
+      { kpi: "负责客户回款额", target: "≥ 3.2 亿", weight: "40%", source: "ERP" },
+      { kpi: "新客户开发", target: "≥ 8 家", weight: "25%", source: "手工填报" },
+      { kpi: "客户满意度评分", target: "≥ 92 分", weight: "20%", source: "手工填报" },
+      { kpi: "商机转化率", target: "≥ 25%", weight: "15%", source: "手工填报" },
+    ]},
+    { employee: "吴婷", role: "区域销售经理", kpis: [
+      { kpi: "区域销售额", target: "≥ 1.8 亿", weight: "45%", source: "ERP" },
+      { kpi: "新客户拜访量", target: "≥ 60 次/季", weight: "25%", source: "手工填报" },
+      { kpi: "报价响应时长", target: "≤ 24h", weight: "30%", source: "手工填报" },
+    ]},
+  ],
+};
 
 const initialCompany: CompanyStrategy = {
   title: "2025 年公司战略目标",
@@ -295,6 +344,10 @@ export default function Performance() {
   const [completenessOpen, setCompletenessOpen] = useState(false);
   const [connectDialogSystem, setConnectDialogSystem] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [personalSheetDept, setPersonalSheetDept] = useState<string | null>(null);
+  const [aiGeneratingPersonal, setAiGeneratingPersonal] = useState(false);
+  const [personalData, setPersonalData] = useState<Record<string, PersonalKpi[]>>(deptPersonalKpis);
+  const [editingPersonalIdx, setEditingPersonalIdx] = useState<number | null>(null);
 
   // 战略目标 state
   const [company, setCompany] = useState<CompanyStrategy>(initialCompany);
@@ -861,7 +914,7 @@ export default function Performance() {
                         </Button>
                       </div>
                     ) : (
-                      <Button variant="ghost" size="sm" className="mt-3 w-full" onClick={() => toast.info(`已展开${d.name}的个人 KPI 拆解`)}>
+                      <Button variant="ghost" size="sm" className="mt-3 w-full" onClick={() => { setPersonalSheetDept(d.name); setEditingPersonalIdx(null); }}>
                         继续拆解到个人
                         <ChevronRight className="ml-1 h-4 w-4" />
                       </Button>
@@ -1227,7 +1280,185 @@ export default function Performance() {
         </SheetContent>
       </Sheet>
 
-      {/* ===== Mock 联通向导 ===== */}
+      {/* ===== 个人 KPI 拆解抽屉 ===== */}
+      <Sheet open={!!personalSheetDept} onOpenChange={(v) => { if (!v) { setPersonalSheetDept(null); setEditingPersonalIdx(null); } }}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{personalSheetDept} · 个人 KPI 拆解</SheetTitle>
+            <SheetDescription>将部门 KPI 分解到每位员工，支持 AI 自动生成和人工微调</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 space-y-4">
+            {/* AI 生成按钮 */}
+            <div className="flex items-center justify-between rounded-lg border bg-primary/5 p-3">
+              <div className="text-xs text-muted-foreground">
+                基于部门 KPI 和岗位职责，AI 自动拆解到个人
+              </div>
+              <Button
+                size="sm"
+                disabled={aiGeneratingPersonal}
+                onClick={() => {
+                  setAiGeneratingPersonal(true);
+                  setTimeout(() => {
+                    setAiGeneratingPersonal(false);
+                    toast.success(`AI 已为 ${personalSheetDept} 生成个人 KPI 草稿`);
+                  }, 1500);
+                }}
+              >
+                <Wand2 className="mr-1.5 h-3.5 w-3.5" />
+                {aiGeneratingPersonal ? "生成中…" : "AI 一键拆解"}
+              </Button>
+            </div>
+
+            {/* 员工卡片列表 */}
+            {personalSheetDept && (personalData[personalSheetDept] || []).map((person, pIdx) => {
+              const isEditing = editingPersonalIdx === pIdx;
+              const wSum = person.kpis.reduce((s, k) => s + (parseInt(k.weight) || 0), 0);
+              return (
+                <Card key={pIdx} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-semibold">{person.employee}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">{person.role}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className={cn("text-[10px]", wSum === 100 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
+                        {person.kpis.length} 项 · {wSum}%
+                      </Badge>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingPersonalIdx(isEditing ? null : pIdx)}>
+                        {isEditing ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {person.kpis.map((k, kIdx) =>
+                      isEditing ? (
+                        <div key={kIdx} className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+                          <div className="flex gap-1.5">
+                            <Input
+                              value={k.kpi}
+                              onChange={(e) => {
+                                const updated = { ...personalData };
+                                updated[personalSheetDept!] = updated[personalSheetDept!].map((p, pi) =>
+                                  pi === pIdx ? { ...p, kpis: p.kpis.map((kk, ki) => ki === kIdx ? { ...kk, kpi: e.target.value } : kk) } : p
+                                );
+                                setPersonalData(updated);
+                              }}
+                              placeholder="KPI 名称"
+                              className="h-8 text-xs"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => {
+                                const updated = { ...personalData };
+                                updated[personalSheetDept!] = updated[personalSheetDept!].map((p, pi) =>
+                                  pi === pIdx ? { ...p, kpis: p.kpis.filter((_, ki) => ki !== kIdx) } : p
+                                );
+                                setPersonalData(updated);
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                          <div className="flex gap-1.5">
+                            <Input
+                              value={k.target}
+                              onChange={(e) => {
+                                const updated = { ...personalData };
+                                updated[personalSheetDept!] = updated[personalSheetDept!].map((p, pi) =>
+                                  pi === pIdx ? { ...p, kpis: p.kpis.map((kk, ki) => ki === kIdx ? { ...kk, target: e.target.value } : kk) } : p
+                                );
+                                setPersonalData(updated);
+                              }}
+                              placeholder="目标值"
+                              className="h-8 text-xs"
+                            />
+                            <Input
+                              value={k.weight}
+                              onChange={(e) => {
+                                const updated = { ...personalData };
+                                updated[personalSheetDept!] = updated[personalSheetDept!].map((p, pi) =>
+                                  pi === pIdx ? { ...p, kpis: p.kpis.map((kk, ki) => ki === kIdx ? { ...kk, weight: e.target.value } : kk) } : p
+                                );
+                                setPersonalData(updated);
+                              }}
+                              placeholder="权重"
+                              className="h-8 w-20 text-xs"
+                            />
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">数据来源：{k.source}</div>
+                        </div>
+                      ) : (
+                        <div key={kIdx} className="rounded-md border bg-card p-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium">{k.kpi}</span>
+                            <span className="text-[10px] text-muted-foreground">权重 {k.weight}</span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                            <span>目标：{k.target}</span>
+                            <Badge variant="outline" className="text-[9px]">{k.source}</Badge>
+                          </div>
+                        </div>
+                      ),
+                    )}
+                  </div>
+
+                  {isEditing && (
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          const updated = { ...personalData };
+                          updated[personalSheetDept!] = updated[personalSheetDept!].map((p, pi) =>
+                            pi === pIdx ? { ...p, kpis: [...p.kpis, { kpi: "", target: "", weight: "0%", source: "手工填报" }] } : p
+                          );
+                          setPersonalData(updated);
+                        }}
+                      >
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        新增 KPI
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          if (wSum !== 100) {
+                            toast.error(`${person.employee} 权重合计 ${wSum}%，需为 100%`);
+                            return;
+                          }
+                          setEditingPersonalIdx(null);
+                          toast.success(`${person.employee} 个人 KPI 已保存`);
+                        }}
+                      >
+                        <Save className="mr-1 h-3.5 w-3.5" />
+                        保存
+                      </Button>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+
+            {/* 底部汇总 */}
+            {personalSheetDept && (personalData[personalSheetDept] || []).length > 0 && (
+              <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-xs text-muted-foreground">
+                <Sparkles className="inline mr-1.5 h-3.5 w-3.5 text-primary" />
+                共 {(personalData[personalSheetDept] || []).length} 人，
+                {(personalData[personalSheetDept] || []).reduce((s, p) => s + p.kpis.length, 0)} 个 KPI。
+                权重校验：{(personalData[personalSheetDept] || []).every(p => p.kpis.reduce((s, k) => s + (parseInt(k.weight) || 0), 0) === 100)
+                  ? <span className="text-emerald-600 font-medium">全部通过 ✓</span>
+                  : <span className="text-amber-600 font-medium">部分未达 100%</span>
+                }
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <Dialog open={!!connectDialogSystem} onOpenChange={(v) => !v && setConnectDialogSystem(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
