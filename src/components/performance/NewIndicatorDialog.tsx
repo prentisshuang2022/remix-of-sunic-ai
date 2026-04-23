@@ -201,6 +201,9 @@ export function NewIndicatorDialog({ open, onOpenChange, defaultFamily = "mfg" }
           <DialogDescription>
             将新指标加入指标库，可被考核周期模板引用。AI 已结合三工光电激光焊接 / 精密装备行业基准提供推荐。
           </DialogDescription>
+          <div className="mt-1 rounded-md border border-blue-200 bg-blue-50/60 px-3 py-2 text-[11px] text-blue-900">
+            💡 新增的指标会加入【配置中心 · 指标库】，可被任意考核周期引用
+          </div>
         </DialogHeader>
 
         {/* 模式切换 */}
