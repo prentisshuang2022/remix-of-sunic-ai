@@ -53,6 +53,19 @@ const mockExtractQuestions = (fileName: string): PreviewQuestion[] => {
   return base;
 };
 
+interface NewQuestion {
+  type: "single" | "judge";
+  text: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  answer: string;
+  topic: string;
+}
+
+const emptyNewQ: NewQuestion = { type: "single", text: "", optionA: "", optionB: "", optionC: "", optionD: "", answer: "", topic: "" };
+
 export default function MaterialBank() {
   const [tab, setTab] = useState<"courseware" | "questions">("courseware");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -62,6 +75,24 @@ export default function MaterialBank() {
   const [extractedQs, setExtractedQs] = useState<PreviewQuestion[]>([]);
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // [FRONTEND-ONLY] New question dialog state
+  const [addQOpen, setAddQOpen] = useState(false);
+  const [newQ, setNewQ] = useState<NewQuestion>({ ...emptyNewQ });
+
+  const handleAddQ = () => {
+    if (!newQ.text.trim() || !newQ.answer) {
+      toast.error("请填写题干和正确答案");
+      return;
+    }
+    if (newQ.type === "single" && (!newQ.optionA || !newQ.optionB)) {
+      toast.error("单选题至少填写 A、B 两个选项");
+      return;
+    }
+    setAddQOpen(false);
+    setNewQ({ ...emptyNewQ });
+    toast.success("题目已添加到题库");
+  };
 
   const resetDialog = () => {
     setUploadStep("select");
