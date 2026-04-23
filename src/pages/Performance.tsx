@@ -914,7 +914,7 @@ export default function Performance() {
                         </Button>
                       </div>
                     ) : (
-                      <Button variant="ghost" size="sm" className="mt-3 w-full" onClick={() => toast.info(`已展开${d.name}的个人 KPI 拆解`)}>
+                      <Button variant="ghost" size="sm" className="mt-3 w-full" onClick={() => { setPersonalSheetDept(d.name); setEditingPersonalIdx(null); }}>
                         继续拆解到个人
                         <ChevronRight className="ml-1 h-4 w-4" />
                       </Button>
