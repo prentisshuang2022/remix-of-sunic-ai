@@ -162,7 +162,7 @@ export default function KnowledgeBase() {
   return (
     <div className="flex flex-col">
       <PageHeader
-        title="知识库管理"
+        title="人资知识库"
         description="人资法律法规、政策制度、操作规程统一管理与智能检索"
         actions={
           <div className="flex gap-2">
