@@ -222,37 +222,35 @@ const indicatorRows = [
   { code: "PR-007", name: "设施报修响应时长", family: "物业", unit: "h", target: "≤ 2", source: "OA 系统", aiTag: "—" },
 ];
 
-/* ================== 过程数据 - 9 个业务系统 ================== */
-interface BizSystem {
+/* ================== 过程数据 - 真实数据源 ================== */
+interface DataSource {
   name: string;
   key: string;
   connected: boolean;
+  planned?: boolean;
+  modules: string[];
   indicators: number;
+  todaySync: number;
   lastSync: string;
+  description: string;
 }
-const bizSystems: BizSystem[] = [
-  { name: "MES 制造执行", key: "MES", connected: true, indicators: 14, lastSync: "2 分钟前" },
-  { name: "ERP 企业资源", key: "ERP", connected: true, indicators: 9, lastSync: "5 分钟前" },
-  { name: "QMS 质量管理", key: "QMS", connected: true, indicators: 6, lastSync: "8 分钟前" },
-  { name: "CRM 客户系统", key: "CRM", connected: false, indicators: 7, lastSync: "—" },
-  { name: "PLM 产品生命周期", key: "PLM", connected: false, indicators: 11, lastSync: "—" },
-  { name: "EHS 安全环境", key: "EHS", connected: false, indicators: 4, lastSync: "—" },
-  { name: "OA 协同办公", key: "OA", connected: true, indicators: 5, lastSync: "12 分钟前" },
-  { name: "钉钉", key: "DT", connected: true, indicators: 3, lastSync: "1 分钟前" },
-  { name: "企微", key: "WX", connected: true, indicators: 2, lastSync: "3 分钟前" },
+const dataSources: DataSource[] = [
+  { name: "钉钉", key: "DT", connected: true, modules: ["考勤", "审批", "组织", "员工"], indicators: 8, todaySync: 240, lastSync: "3 分钟前", description: "通过钉钉开放平台对接，自动同步考勤打卡、请假审批、组织架构和员工花名册数据" },
+  { name: "ERP", key: "ERP", connected: true, modules: ["销售", "财务", "采购", "库存"], indicators: 12, todaySync: 117, lastSync: "8 分钟前", description: "对接金蝶/用友 ERP 系统，自动抓取销售订单、财务核算、采购执行和库存周转数据" },
+  { name: "CRM", key: "CRM", connected: false, planned: true, modules: ["销售漏斗", "客户", "商机"], indicators: 6, todaySync: 0, lastSync: "—", description: "规划对接 CRM 系统，将覆盖销售漏斗转化率、客户拜访量、商机跟进等营销指标" },
 ];
 
 const dataLogs = [
-  { time: "2025-06-20 14:32", system: "MES", indicator: "OEE 设备综合效率", employee: "张伟", value: "81.2%", status: "成功" },
-  { time: "2025-06-20 14:32", system: "MES", indicator: "工时利用率", employee: "李明", value: "87.5%", status: "成功" },
-  { time: "2025-06-20 14:30", system: "ERP", indicator: "费用预算执行偏差", employee: "—", value: "3.2%", status: "成功" },
-  { time: "2025-06-20 14:28", system: "QMS", indicator: "千件不良数", employee: "—", value: "298 PPM", status: "成功" },
-  { time: "2025-06-20 14:25", system: "钉钉", indicator: "出勤率", employee: "全员", value: "97.8%", status: "成功" },
-  { time: "2025-06-20 14:20", system: "OA", indicator: "项目里程碑达成", employee: "赵六", value: "3/4", status: "成功" },
-  { time: "2025-06-20 14:15", system: "MES", indicator: "订单交付准时率", employee: "—", value: "96.4%", status: "失败" },
-  { time: "2025-06-20 14:10", system: "ERP", indicator: "回款及时率", employee: "—", value: "91.8%", status: "成功" },
-  { time: "2025-06-20 14:05", system: "MES", indicator: "良品率", employee: "—", value: "99.1%", status: "失败" },
-  { time: "2025-06-20 14:00", system: "企微", indicator: "消息触达率", employee: "全员", value: "99.5%", status: "成功" },
+  { time: "2025-06-20 14:32", system: "钉钉", indicator: "出勤率", employee: "全员", value: "97.8%", status: "成功" },
+  { time: "2025-06-20 14:30", system: "钉钉", indicator: "请假审批通过数", employee: "全员", value: "3", status: "成功" },
+  { time: "2025-06-20 14:28", system: "ERP", indicator: "销售订单额", employee: "—", value: "128.6 万", status: "成功" },
+  { time: "2025-06-20 14:25", system: "钉钉", indicator: "加班工时", employee: "全员", value: "12.5h", status: "成功" },
+  { time: "2025-06-20 14:20", system: "ERP", indicator: "回款及时率", employee: "—", value: "91.8%", status: "成功" },
+  { time: "2025-06-20 14:15", system: "ERP", indicator: "采购交付准时率", employee: "—", value: "94.2%", status: "成功" },
+  { time: "2025-06-20 14:10", system: "钉钉", indicator: "组织架构变更", employee: "—", value: "新增 2 人", status: "成功" },
+  { time: "2025-06-20 14:05", system: "ERP", indicator: "库存周转天数", employee: "—", value: "32 天", status: "成功" },
+  { time: "2025-06-20 14:00", system: "钉钉", indicator: "花名册同步", employee: "全员", value: "202 人", status: "成功" },
+  { time: "2025-06-20 13:55", system: "ERP", indicator: "费用预算执行偏差", employee: "—", value: "3.2%", status: "成功" },
 ];
 
 /* ================== 实时进度 ================== */
